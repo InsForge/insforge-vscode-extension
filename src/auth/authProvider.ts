@@ -46,6 +46,8 @@ interface TokenResponse {
   message?: string;
 }
 
+const TOKEN_EXPIRY_KEY = 'insforge.tokenExpiry';
+
 export class AuthProvider {
   private context: vscode.ExtensionContext;
   private _onDidChangeAuth = new vscode.EventEmitter<boolean>();
@@ -69,11 +71,173 @@ export class AuthProvider {
 
   async isAuthenticated(): Promise<boolean> {
     const token = await this.getAccessToken();
-    return !!token;
+    if (!token) {
+      return false;
+    }
+
+    // If token is expired, try to refresh it
+    if (this.isTokenExpired()) {
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) {
+        // Couldn't refresh, clear auth
+        await this.clearAuth();
+        return false;
+      }
+    }
+
+    return true;
   }
 
   async getAccessToken(): Promise<string | undefined> {
     return this.context.secrets.get(AUTH_SECRET_KEY);
+  }
+
+  /**
+   * Check if token is expired based on stored expiry time
+   */
+  private isTokenExpired(): boolean {
+    const expiry = this.context.globalState.get<number>(TOKEN_EXPIRY_KEY);
+    if (!expiry) {
+      return false; // No expiry stored, assume valid
+    }
+    // Add 30 second buffer before expiry
+    return Date.now() > (expiry - 30000);
+  }
+
+  /**
+   * Try to refresh the access token using refresh token
+   */
+  private async refreshAccessToken(): Promise<boolean> {
+    const refreshToken = await this.context.secrets.get(REFRESH_SECRET_KEY);
+    if (!refreshToken) {
+      return false;
+    }
+
+    try {
+      const body: Record<string, string> = {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.clientId,
+      };
+
+      if (this.clientSecret) {
+        body.client_secret = this.clientSecret;
+      }
+
+      const response = await fetch(`${INSFORGE_URL}/api/oauth/v1/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        console.error('Token refresh failed:', response.statusText);
+        return false;
+      }
+
+      const tokens = await response.json() as TokenResponse;
+
+      if (tokens.error) {
+        console.error('Token refresh error:', tokens.error);
+        return false;
+      }
+
+      // Store new tokens
+      await this.context.secrets.store(AUTH_SECRET_KEY, tokens.access_token);
+      if (tokens.refresh_token) {
+        await this.context.secrets.store(REFRESH_SECRET_KEY, tokens.refresh_token);
+      }
+
+      // Store expiry time
+      if (tokens.expires_in) {
+        const expiryTime = Date.now() + (tokens.expires_in * 1000);
+        await this.context.globalState.update(TOKEN_EXPIRY_KEY, expiryTime);
+      }
+
+      console.log('Token refreshed successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to refresh token:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle 401 unauthorized response - try refresh or logout
+   */
+  private async handleUnauthorized(): Promise<boolean> {
+    // Try to refresh token first
+    const refreshed = await this.refreshAccessToken();
+    if (refreshed) {
+      return true;
+    }
+
+    // Refresh failed, clear everything and force re-login
+    await this.clearAuth();
+    return false;
+  }
+
+  /**
+   * Clear all auth data without showing logout message
+   */
+  private async clearAuth(): Promise<void> {
+    await this.context.secrets.delete(AUTH_SECRET_KEY);
+    await this.context.secrets.delete(REFRESH_SECRET_KEY);
+    await this.context.globalState.update(USER_DATA_KEY, undefined);
+    await this.context.globalState.update(TOKEN_EXPIRY_KEY, undefined);
+
+    this.currentOrg = null;
+    this.currentProject = null;
+
+    vscode.commands.executeCommand('setContext', 'insforge.isLoggedIn', false);
+    this._onDidChangeAuth.fire(false);
+  }
+
+  /**
+   * Make authenticated API request with automatic token refresh
+   */
+  private async authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    // Check if token might be expired
+    if (this.isTokenExpired()) {
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) {
+        throw new Error('UNAUTHORIZED');
+      }
+    }
+
+    const token = await this.getAccessToken();
+    if (!token) {
+      throw new Error('UNAUTHORIZED');
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    // Handle 401 - token might have been invalidated server-side
+    if (response.status === 401) {
+      const refreshed = await this.handleUnauthorized();
+      if (refreshed) {
+        // Retry with new token
+        const newToken = await this.getAccessToken();
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers,
+            Authorization: `Bearer ${newToken}`,
+          },
+        });
+      }
+      throw new Error('UNAUTHORIZED');
+    }
+
+    return response;
   }
 
   /**
@@ -229,6 +393,11 @@ export class AuthProvider {
               await this.context.secrets.store(REFRESH_SECRET_KEY, tokens.refresh_token);
             }
 
+            // Store expiry time (default to 1 hour if not provided)
+            const expiresIn = tokens.expires_in || 3600;
+            const expiryTime = Date.now() + (expiresIn * 1000);
+            await this.context.globalState.update(TOKEN_EXPIRY_KEY, expiryTime);
+
             // Fetch and store user data
             const userData = await this.fetchUserData(tokens.access_token);
             await this.context.globalState.update(USER_DATA_KEY, userData);
@@ -342,17 +511,8 @@ export class AuthProvider {
   }
 
   async getOrganizations(): Promise<Organization[]> {
-    const token = await this.getAccessToken();
-    if (!token) {
-      return [];
-    }
-
     try {
-      const response = await fetch(`${INSFORGE_URL}/organizations/v1`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await this.authenticatedFetch(`${INSFORGE_URL}/organizations/v1`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch organizations: ${response.statusText}`);
@@ -361,23 +521,18 @@ export class AuthProvider {
       const data = await response.json() as { organizations: Organization[] };
       return data.organizations || [];
     } catch (error) {
+      if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+        // Token invalid, auth state already cleared by authenticatedFetch
+        return [];
+      }
       console.error('Failed to fetch organizations:', error);
       return [];
     }
   }
 
   async getProjects(organizationId: string): Promise<Project[]> {
-    const token = await this.getAccessToken();
-    if (!token) {
-      return [];
-    }
-
     try {
-      const response = await fetch(`${INSFORGE_URL}/organizations/v1/${organizationId}/projects`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await this.authenticatedFetch(`${INSFORGE_URL}/organizations/v1/${organizationId}/projects`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.statusText}`);
@@ -386,23 +541,17 @@ export class AuthProvider {
       const data = await response.json() as { projects: Project[] };
       return data.projects || [];
     } catch (error) {
+      if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+        return [];
+      }
       console.error('Failed to fetch projects:', error);
       return [];
     }
   }
 
   async getProjectApiKey(projectId: string): Promise<string | null> {
-    const token = await this.getAccessToken();
-    if (!token) {
-      return null;
-    }
-
     try {
-      const response = await fetch(`${INSFORGE_URL}/projects/v1/${projectId}/access-api-key`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await this.authenticatedFetch(`${INSFORGE_URL}/projects/v1/${projectId}/access-api-key`);
 
       if (!response.ok) {
         return null;
@@ -411,6 +560,9 @@ export class AuthProvider {
       const data = await response.json() as { access_api_key: string };
       return data.access_api_key;
     } catch (error) {
+      if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+        return null;
+      }
       console.error('Failed to fetch API key:', error);
       return null;
     }
