@@ -7,10 +7,11 @@ const REFRESH_SECRET_KEY = 'insforge.refreshToken';
 const USER_DATA_KEY = 'insforge.userData';
 
 // OAuth configuration
-const INSFORGE_URL = 'https://api-beta.insforge.dev'; // Staging API
+const INSFORGE_URL = 'https://api.insforge.dev'; // Production API
 const OAUTH_CALLBACK_PORT = 54321; // Fixed port for OAuth callback
-const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_CALLBACK_PORT}/callback`;
-const DEFAULT_CLIENT_ID = 'clf_huv5ZKVvdNlnflRLVfdcaA'; // Official InsForge VS Code Extension
+// Per RFC 8252, use 127.0.0.1 (not localhost) for native app loopback redirects
+const OAUTH_REDIRECT_URI = `http://127.0.0.1:${OAUTH_CALLBACK_PORT}/callback`;
+const DEFAULT_CLIENT_ID = 'clf_YHy7imyx2SKnEZZwpV-X1Q'; // Official InsForge VS Code Extension (Public)
 
 // OAuth scopes
 const SCOPES = 'user:read organizations:read projects:read projects:write';
@@ -418,6 +419,7 @@ export class AuthProvider {
         }
       });
 
+      // Per RFC 8252, listen only on loopback interface (127.0.0.1)
       server.listen(port, '127.0.0.1', async () => {
         // Build OAuth URL
         const codeChallenge = this.generateCodeChallenge(codeVerifier);

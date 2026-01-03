@@ -4,7 +4,7 @@
   "description": "Install and manage InsForge MCP servers with one click. Connect your projects and configure AI coding assistants.",
   "version": "0.0.1",
   "publisher": "insforge",
-  "icon": "resources/icon.svg",
+  "icon": "resources/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/InsForge/insforge-vscode-extension"

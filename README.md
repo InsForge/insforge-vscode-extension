@@ -2,6 +2,16 @@
 
 Install and manage InsForge MCP servers with one click.
 
+## Getting Started
+
+1. Install the extension from the VS Code Marketplace
+2. Click the InsForge icon in the Activity Bar (left sidebar)
+3. Click "Login with InsForge" to authenticate
+4. Select your organization and project
+5. Click the cloud icon to install MCP for your project
+
+The extension will automatically configure your MCP settings for Claude, Cursor, or other supported AI assistants.
+
 ## Features
 
 - OAuth login with InsForge
@@ -23,12 +33,34 @@ npm install
 npm run compile
 ```
 
-### Testing
+### Testing (Debug Mode)
 
 1. Open this folder in VS Code
-2. Press `F5` to launch Extension Development Host
-3. A new VS Code window opens with the extension loaded
-4. Look for "InsForge" in the Activity Bar (left sidebar)
+2. Run `npm run watch` in terminal (auto-recompiles on changes)
+3. Press `F5` to launch Extension Development Host
+4. A new VS Code window opens with the extension loaded
+5. Look for "InsForge" in the Activity Bar (left sidebar)
+
+**Tips:**
+- Use `Cmd+Shift+P` → "Developer: Reload Window" to reload after changes
+- Check "Output" panel → "InsForge" for debug logs
+- Set breakpoints in `src/` files for debugging
+
+### Testing (Local Package)
+
+To test the packaged extension before publishing:
+
+```bash
+npm run package
+```
+
+Then install the generated `.vsix` file:
+
+```bash
+code --install-extension insforge-0.0.1.vsix
+```
+
+Or in VS Code: `Cmd+Shift+P` → "Extensions: Install from VSIX..." → select the file.
 
 ### Commands
 
@@ -73,6 +105,12 @@ src/
 ## Publishing
 
 ```bash
-npx vsce package    # Creates .vsix file
+npm run package     # Creates .vsix file
 npx vsce publish    # Publish to marketplace
 ```
+
+### Package Contents
+
+The `.vscodeignore` file excludes source files and dev dependencies to keep the package small. Only the compiled `out/` folder and `resources/` are included.
+
+**Note:** The extension icon must be PNG format for the VS Code Marketplace (SVG is not supported for the main icon).
