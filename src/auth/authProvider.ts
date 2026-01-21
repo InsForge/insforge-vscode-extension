@@ -36,6 +36,7 @@ export interface Project {
   region: string;
   appkey: string;
   status?: string;
+  storage_disk_size?: number;
   access_api_key?: string;
 }
 

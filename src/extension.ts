@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { AuthProvider } from './auth/authProvider';
-import { ProjectTreeProvider } from './views/projectTreeProvider';
+import { ProjectsViewProvider } from './views/projectsViewProvider';
 import { registerCommands } from './commands';
 
 let authProvider: AuthProvider;
 let statusBarItem: vscode.StatusBarItem;
+let projectsViewProvider: ProjectsViewProvider;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('InsForge extension is now active');
@@ -12,11 +13,12 @@ export async function activate(context: vscode.ExtensionContext) {
   // Initialize auth provider
   authProvider = new AuthProvider(context);
 
-  // Initialize tree view provider
-  const projectTreeProvider = new ProjectTreeProvider(authProvider);
-
-  // Register tree view
-  vscode.window.registerTreeDataProvider('insforge.projectView', projectTreeProvider);
+  // Initialize and register the single projects webview provider
+  projectsViewProvider = new ProjectsViewProvider(context.extensionUri, authProvider);
+  projectsViewProvider.setContext(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(ProjectsViewProvider.viewType, projectsViewProvider)
+  );
 
   // Create status bar item (left side, high priority to be leftmost)
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -29,14 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   // Register all commands
-  registerCommands(context, authProvider, projectTreeProvider, updateStatusBar);
-
-  // Check if user is already logged in
-  const isLoggedIn = await authProvider.isAuthenticated();
-  if (isLoggedIn) {
-    vscode.commands.executeCommand('setContext', 'insforge.isLoggedIn', true);
-    projectTreeProvider.refresh();
-  }
+  registerCommands(context, authProvider, projectsViewProvider, updateStatusBar);
 
   // Initial status bar update
   updateStatusBar();

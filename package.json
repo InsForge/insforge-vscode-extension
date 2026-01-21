@@ -57,6 +57,16 @@
         "command": "insforge.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "insforge.openSubscription",
+        "title": "InsForge: View Subscription",
+        "icon": "$(credit-card)"
+      },
+      {
+        "command": "insforge.openUsage",
+        "title": "InsForge: View Usage",
+        "icon": "$(graph)"
       }
     ],
     "viewsContainers": {
@@ -71,33 +81,31 @@
     "views": {
       "insforge": [
         {
-          "id": "insforge.projectView",
-          "name": "Projects"
+          "id": "insforge.projectsView",
+          "name": "",
+          "type": "webview"
         }
       ]
     },
     "menus": {
       "view/title": [
         {
-          "command": "insforge.refresh",
-          "when": "view == insforge.projectView",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
+          "command": "insforge.openSubscription",
+          "when": "view == insforge.projectsView",
+          "group": "navigation@1"
+        },
         {
-          "command": "insforge.installMcp",
-          "when": "view == insforge.projectView && viewItem == project",
-          "group": "inline"
+          "command": "insforge.openUsage",
+          "when": "view == insforge.projectsView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "insforge.refresh",
+          "when": "view == insforge.projectsView",
+          "group": "navigation@3"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "insforge.projectView",
-        "contents": "Connect your InsForge account to manage MCP servers.\n[Login with InsForge](command:insforge.login)"
-      }
-    ],
     "configuration": {
       "title": "InsForge",
       "properties": {

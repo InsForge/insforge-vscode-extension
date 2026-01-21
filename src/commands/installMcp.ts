@@ -1,28 +1,47 @@
 import * as vscode from 'vscode';
 import { AuthProvider, Project } from '../auth/authProvider';
 
+/**
+ * Check if current VS Code theme is dark
+ */
+function isDarkTheme(): boolean {
+  const theme = vscode.window.activeColorTheme;
+  return theme.kind === vscode.ColorThemeKind.Dark || 
+         theme.kind === vscode.ColorThemeKind.HighContrast;
+}
+
 // Supported MCP clients from @insforge/install
 const MCP_CLIENTS = [
-  { id: 'cursor', label: 'Cursor', description: 'Cursor IDE (~/.cursor/mcp.json)', projectLocal: false },
-  { id: 'claude-code', label: 'Claude Code', description: 'Project-local (.mcp.json in workspace)', projectLocal: true },
-  { id: 'windsurf', label: 'Windsurf', description: 'Windsurf IDE (~/.codeium/windsurf/)', projectLocal: false },
-  { id: 'cline', label: 'Cline', description: 'Cline VS Code Extension', projectLocal: false },
-  { id: 'roocode', label: 'Roo Code', description: 'Roo-Code VS Code Extension', projectLocal: false },
-  { id: 'copilot', label: 'GitHub Copilot', description: 'Project-local (.vscode/mcp.json)', projectLocal: true },
-  { id: 'codex', label: 'Codex', description: 'OpenAI Codex CLI', projectLocal: false },
-  { id: 'trae', label: 'Trae', description: 'Trae IDE', projectLocal: false },
-  { id: 'qoder', label: 'Qoder', description: 'Qoder IDE', projectLocal: false },
+  { id: 'cursor', label: 'Cursor', description: 'Cursor IDE (~/.cursor/mcp.json)', projectLocal: false, icon: 'cursor' },
+  { id: 'claude-code', label: 'Claude Code', description: 'Project-local (.mcp.json in workspace)', projectLocal: true, icon: 'claude_code' },
+  { id: 'antigravity', label: 'Google Antigravity', description: 'Project-local (~/.gemini/antigravity/mcp_config.json)', projectLocal: true, icon: 'antigravity' },
+  { id: 'windsurf', label: 'Windsurf', description: 'Windsurf IDE (~/.codeium/windsurf/)', projectLocal: false, icon: 'windsurf' },
+  { id: 'cline', label: 'Cline', description: 'Cline VS Code Extension', projectLocal: false, icon: 'cline' },
+  { id: 'roocode', label: 'Roo Code', description: 'Roo-Code VS Code Extension', projectLocal: false, icon: 'roo_code' },
+  { id: 'copilot', label: 'GitHub Copilot', description: 'Project-local (.vscode/mcp.json)', projectLocal: true, icon: 'copilot' },
+  { id: 'codex', label: 'Codex', description: 'OpenAI Codex CLI', projectLocal: false, icon: 'codex' },
+  { id: 'trae', label: 'Trae', description: 'Trae IDE', projectLocal: false, icon: 'trae' },
+  { id: 'qoder', label: 'Qoder', description: 'Qoder IDE', projectLocal: false, icon: 'qoder' },
+  { id: 'kiro', label: 'Kiro', description: 'Kiro IDE', projectLocal: false, icon: 'kiro' },
 ] as const;
 
-export async function installMcp(project: Project, authProvider: AuthProvider): Promise<boolean> {
+export async function installMcp(
+  project: Project,
+  authProvider: AuthProvider,
+  extensionUri: vscode.Uri,
+  onInstalled?: (projectId: string) => void
+): Promise<boolean> {
   try {
     // Step 1: Let user pick which client to install for
+    const iconSuffix = isDarkTheme() ? '' : '-light';
+    
     const clientPick = await vscode.window.showQuickPick(
       MCP_CLIENTS.map(client => ({
         label: client.label,
         description: client.description,
         id: client.id,
         projectLocal: client.projectLocal,
+        iconPath: vscode.Uri.joinPath(extensionUri, 'resources', 'agents', `${client.icon}${iconSuffix}.svg`),
       })),
       {
         placeHolder: 'Select which AI client to install MCP for',
@@ -138,6 +157,9 @@ export async function installMcp(project: Project, authProvider: AuthProvider): 
             terminal.show();
           }
         });
+
+        // Mark project as having MCP installed
+        onInstalled?.(project.id);
 
         return true;
       }
