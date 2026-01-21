@@ -192,17 +192,6 @@ export function registerCommands(
     })
   );
 
-  // ============================================================
-  // TODO: MUST DISABLE BEFORE PUBLISH - Development only command
-  // Reset MCP state command (for testing)
-  // ============================================================
-  context.subscriptions.push(
-    vscode.commands.registerCommand('insforge.resetMcpState', async () => {
-      await projectsViewProvider.clearInstalledMcpProject();
-      vscode.window.showInformationMessage('MCP state has been reset');
-    })
-  );
-
   // Install MCP command - uses current project
   context.subscriptions.push(
     vscode.commands.registerCommand('insforge.installMcp', async () => {

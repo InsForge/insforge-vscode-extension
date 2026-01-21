@@ -48,18 +48,6 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     return this.getInstalledMcpProject() === projectId;
   }
 
-  // ============================================================
-  // TODO: MUST DISABLE BEFORE PUBLISH - Development only method
-  // ============================================================
-  /**
-   * Clear the installed MCP project state (for testing)
-   */
-  public async clearInstalledMcpProject(): Promise<void> {
-    if (!this._context) return;
-    await this._context.globalState.update(INSTALLED_MCP_KEY, undefined);
-    this.refresh();
-  }
-
   public refresh(): void {
     if (this._view) {
       this._updateContent();

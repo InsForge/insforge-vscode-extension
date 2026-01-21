@@ -67,11 +67,6 @@
         "command": "insforge.openUsage",
         "title": "InsForge: View Usage",
         "icon": "$(graph)"
-      },
-      {
-        "command": "insforge.resetMcpState",
-        "title": "InsForge: Reset MCP State (Dev)",
-        "_comment": "TODO: MUST DISABLE BEFORE PUBLISH - Development only command"
       }
     ],
     "viewsContainers": {
