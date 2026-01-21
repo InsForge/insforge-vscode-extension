@@ -90,7 +90,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           await this._handleSelectProject(message.orgId, message.projectId);
           break;
         case 'createProject':
-          const createUrl = `https://insforge.dev/dashboard/organization/${message.orgId}/projects`;
+          const createUrl = `https://insforge.dev/dashboard/organization/${message.orgId}/projects?create-project=true`;
           vscode.env.openExternal(vscode.Uri.parse(createUrl));
           break;
         case 'installMcp':
