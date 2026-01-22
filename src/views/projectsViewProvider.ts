@@ -26,6 +26,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   ) {
     // Refresh when auth state changes
     _authProvider.onDidChangeAuth(() => this.refresh());
+    
+    // Refresh when theme changes (to update logo)
+    vscode.window.onDidChangeActiveColorTheme(() => this.refresh());
   }
 
   /**
@@ -343,8 +346,12 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _getWelcomeHtml(webview: vscode.Webview): string {
+    // Choose logo based on current theme
+    const isDarkTheme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark
+      || vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast;
+    const logoFile = isDarkTheme ? 'logo-dark.svg' : 'logo-light.svg';
     const logoUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'logo-dark.svg')
+      vscode.Uri.joinPath(this._extensionUri, 'resources', logoFile)
     );
 
     return `<!DOCTYPE html>
