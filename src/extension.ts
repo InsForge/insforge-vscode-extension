@@ -53,4 +53,9 @@ function updateStatusBar() {
 
 export function deactivate() {
   console.log('InsForge extension is now deactivated');
+  
+  // Clean up socket listeners
+  if (projectsViewProvider) {
+    projectsViewProvider.stopAllSocketListeners();
+  }
 }

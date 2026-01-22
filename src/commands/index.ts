@@ -216,8 +216,26 @@ export function registerCommands(
         return;
       }
 
-      const success = await installMcp(project, authProvider, context.extensionUri, (projectId) => {
-        projectsViewProvider.markMcpInstalled(projectId);
+      const success = await installMcp(project, authProvider, context.extensionUri, {
+        onVerifying: (projectId) => {
+          projectsViewProvider.markMcpVerifying(projectId);
+        },
+        onVerified: async (projectId, tools) => {
+          projectsViewProvider.markMcpVerified(projectId, tools);
+
+          // Start socket listener to wait for real MCP connection
+          try {
+            const apiKey = await authProvider.getProjectApiKey(projectId);
+            if (apiKey && project) {
+              projectsViewProvider.startSocketListener(project, apiKey);
+            }
+          } catch (err) {
+            console.error('[installMcp] Failed to start MCP socket listener:', err);
+          }
+        },
+        onFailed: (projectId, error) => {
+          projectsViewProvider.markMcpFailed(projectId, error);
+        }
       });
     })
   );
