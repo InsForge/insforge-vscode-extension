@@ -1,16 +1,12 @@
-name: Publish Extension
+name: Build Extension
 
 on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish (leave empty to use package.json version)'
-        required: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +23,15 @@ jobs:
       - name: Package extension
         run: npx vsce package
 
-      - name: Publish to VS Code Marketplace
-        run: npx vsce publish -p ${{ secrets.VSCE_PAT }}
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
 
-      - name: Publish to Open VSX
-        run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
+      - name: Upload artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-package
+          path: '*.vsix'
