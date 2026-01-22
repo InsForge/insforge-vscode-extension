@@ -19,16 +19,17 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
   private _context?: vscode.ExtensionContext;
+  private _disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _authProvider: AuthProvider
   ) {
     // Refresh when auth state changes
-    _authProvider.onDidChangeAuth(() => this.refresh());
+    this._disposables.push(_authProvider.onDidChangeAuth(() => this.refresh()));
     
     // Refresh when theme changes (to update logo)
-    vscode.window.onDidChangeActiveColorTheme(() => this.refresh());
+    this._disposables.push(vscode.window.onDidChangeActiveColorTheme(() => this.refresh()));
   }
 
   /**
@@ -36,6 +37,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
    */
   public setContext(context: vscode.ExtensionContext): void {
     this._context = context;
+    this._disposables.push(...this._disposables);
   }
 
   /**
