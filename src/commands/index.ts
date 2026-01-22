@@ -239,4 +239,19 @@ export function registerCommands(
       });
     })
   );
+
+  // Reset state command (for development/testing)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('insforge.resetState', async () => {
+      const confirm = await vscode.window.showWarningMessage(
+        'This will clear all InsForge extension state. Are you sure?',
+        'Yes, Reset',
+        'Cancel'
+      );
+      if (confirm === 'Yes, Reset') {
+        await projectsViewProvider.clearAllState();
+        vscode.window.showInformationMessage('InsForge state has been reset.');
+      }
+    })
+  );
 }

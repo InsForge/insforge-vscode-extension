@@ -210,6 +210,17 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     stopAllMcpSocketListeners();
   }
 
+  /**
+   * Clear all extension state (for testing)
+   */
+  public async clearAllState(): Promise<void> {
+    if (!this._context) return;
+    this.stopAllSocketListeners();
+    await this._context.globalState.update(MCP_STATUS_KEY, undefined);
+    await this._context.globalState.update(MCP_REAL_CONNECTED_KEY, undefined);
+    this.refresh();
+  }
+
   public refresh(): void {
     if (this._view) {
       this._updateContent();
@@ -1080,7 +1091,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     }
     
     .guide-card {
-      background: var(--vscode-editorWidget-background, ##262626);
+      background: var(--vscode-editorWidget-background, #262626);
+      border: 1px solid var(--vscode-editorWidget-border, #454545);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -1128,14 +1140,14 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       font-size: 18px;
       font-weight: 600;
       line-height: 28px;
-      color: white;
+      color: var(--vscode-foreground);
       margin-bottom: 8px;
     }
     
     .guide-desc {
       font-size: 14px;
       line-height: 21px;
-      color: #F5F5F5;
+      color: var(--vscode-descriptionForeground);
     }
     
     .guide-close {
@@ -1149,7 +1161,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       border: none;
       padding: 0;
       cursor: pointer;
-      color: #737373;
+      color: var(--vscode-foreground);
+      opacity: 0.6;
     }
     
     .guide-close .codicon {
@@ -1160,7 +1173,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     .guide-prompt-box {
       margin-top: 8px;
       padding: 12px;
-      background: #404040;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, var(--vscode-editorWidget-border));
       border-radius: 8px;
       position: relative;
       display: flex;
@@ -1171,7 +1185,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     .prompt-label {
       font-size: 12px;
       line-height: 20px;
-      color: #FAFAFA;
+      color: var(--vscode-foreground);
+      opacity: 0.8;
     }
     
     .prompt-copy {
@@ -1182,7 +1197,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       border: none;
       padding: 4px;
       cursor: pointer;
-      background-color: #262626;
+      background-color: var(--vscode-button-secondaryBackground);
       border-radius: 6px;
       display: flex;
       align-items: center;
@@ -1198,7 +1213,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     .prompt-text {
       font-size: 14px;
       line-height: 24px;
-      color: #D4D4D4;
+      color: var(--vscode-foreground);
+      opacity: 0.9;
     }
     
     /* Guide footer with navigation */
@@ -1213,7 +1229,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     .guide-step-indicator {
       font-size: 14px;
       line-height: 21px;
-      color: #F5F5F5;
+      color: var(--vscode-foreground);
+      opacity: 0.8;
     }
     
     .guide-nav {
