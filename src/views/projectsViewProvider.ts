@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { AuthProvider, Organization, Project } from '../auth/authProvider';
 import { McpStatus } from '../commands/installMcp';
 import { startMcpSocketListener, stopMcpSocketListener, stopAllMcpSocketListeners } from '../utils/mcpSocketListener';
+import { loadSvg } from '../utils/svgLoader';
 
 const MCP_STATUS_KEY = 'insforge.mcpStatus';
 const MCP_REAL_CONNECTED_KEY = 'insforge.mcpRealConnected';
@@ -398,24 +399,13 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     webview: vscode.Webview,
     orgsWithProjects: Array<{ org: Organization; projects: Project[] }>
   ): string {
-    const folderIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'folder.svg')
-    );
-    const mcpIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'mcp.svg')
-    );
-    const connectIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'connect.svg')
-    );
-    const sendIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'send.svg')
-    );
-    const checkedIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'checked.svg')
-    );
-    const copyIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'resources', 'icons', 'copy.svg')
-    );
+    // Load SVG icons from files (supports currentColor for theming)
+    const folderSvg = loadSvg(this._extensionUri, 'resources/icons/folder.svg');
+    const mcpSvg = loadSvg(this._extensionUri, 'resources/icons/mcp.svg');
+    const connectSvg = loadSvg(this._extensionUri, 'resources/icons/connect.svg');
+    const sendSvg = loadSvg(this._extensionUri, 'resources/icons/send.svg');
+    const copySvg = loadSvg(this._extensionUri, 'resources/icons/copy.svg');
+    const checkedSvg = loadSvg(this._extensionUri, 'resources/icons/checked.svg');
 
     const orgsHtml = orgsWithProjects.map(({ org, projects }) => {
       if (projects.length === 0) {
@@ -425,7 +415,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
             <div class="org-header" onclick="toggleOrg('${org.id}')">
               <span class="codicon codicon-chevron-down" id="chevron-${org.id}"></span>
               <span class="codicon codicon-organization"></span>
-              <span class="org-name">${this._escapeHtml(org.name)}</span>
+              <span class="org-name" title="${this._escapeHtml(org.name)}">${this._escapeHtml(org.name)}</span>
               <button class="org-open-btn" onclick="event.stopPropagation(); openInInsforge('${org.id}')" title="Open in InsForge">
                 Open in InsForge
                 <span class="codicon codicon-link-external"></span>
@@ -433,7 +423,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
             </div>
             <div class="org-content" id="content-${org.id}">
               <div class="empty-state">
-                <img class="folder-icon" src="${folderIconUri}" alt="Folder" />
+                <div class="folder-icon">${folderSvg}</div>
                 <p class="empty-title">No Projects Yet</p>
                 <p class="empty-desc">Add your first project to get started</p>
                 <button class="btn primary" onclick="createProject('${org.id}')">Create First Project</button>
@@ -473,7 +463,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
             break;
           default:
             mcpStatusHtml = `<button class="install-btn" onclick="event.stopPropagation(); installMcp('${org.id}', '${project.id}')" title="Install MCP">
-              <img class="mcp-icon" src="${mcpIconUri}" alt="MCP" />
+              <span class="mcp-icon">${mcpSvg}</span>
               <span class="install-text">Install MCP</span>
             </button>`;
         }
@@ -483,7 +473,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           <div class="project-header" onclick="toggleProject('${project.id}')">
             <span class="codicon codicon-chevron-right" id="project-chevron-${project.id}"></span>
             <span class="codicon codicon-project"></span>
-            <span class="project-name">${this._escapeHtml(project.name)}</span>
+            <span class="project-name" title="${this._escapeHtml(project.name)}">${this._escapeHtml(project.name)}</span>
             ${mcpStatusHtml}
           </div>
           <div class="project-content collapsed" id="project-content-${project.id}">
@@ -515,7 +505,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           <div class="org-header" onclick="toggleOrg('${org.id}')">
             <span class="codicon codicon-chevron-down" id="chevron-${org.id}"></span>
             <span class="codicon codicon-organization"></span>
-            <span class="org-name">${this._escapeHtml(org.name)}</span>
+            <span class="org-name" title="${this._escapeHtml(org.name)}">${this._escapeHtml(org.name)}</span>
             <button class="org-open-btn" onclick="event.stopPropagation(); openInInsforge('${org.id}')" title="Open in InsForge">
               Open in InsForge
               <span class="codicon codicon-link-external"></span>
@@ -558,9 +548,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       <!-- Step 1: Install MCP -->
       <div class="guide-step ${showStep1 ? '' : 'hidden'}" id="step1">
         <div class="guide-content">
-          <div class="guide-icon">
-            <img src="${connectIconUri}" alt="Connect" />
-          </div>
+          <div class="guide-icon">${connectSvg}</div>
           <div class="guide-text">
             <div class="guide-title">Install a new MCP Server</div>
             <div class="guide-desc">Pick a project and connect it to your IDE to get started.</div>
@@ -585,17 +573,13 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       <!-- Step 2: Verify Connection -->
       <div class="guide-step ${showStep2 ? '' : 'hidden'}" id="step2">
         <div class="guide-content">
-          <div class="guide-icon">
-            <img src="${sendIconUri}" alt="Send" />
-          </div>
+          <div class="guide-icon">${sendSvg}</div>
           <div class="guide-text">
             <div class="guide-title">Verify Connection</div>
             <div class="guide-desc">Send the prompt below to your AI coding agent to verify the connection.</div>
             <div class="guide-prompt-box">
               <span class="prompt-label">prompt</span>
-              <button class="prompt-copy" onclick="copyPrompt()" title="Copy">
-                <img src="${copyIconUri}" alt="Copy" />
-              </button>
+              <button class="prompt-copy" onclick="copyPrompt()" title="Copy">${copySvg}</button>
               <p class="prompt-text">I'm using InsForge as my backend platform, call InsForge MCP's fetch-docs tool to learn about InsForge instructions.</p>
             </div>
           </div>
@@ -619,9 +603,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       <!-- Completion: Connection Verified -->
       <div class="guide-step ${showComplete ? '' : 'hidden'}" id="stepComplete">
         <div class="guide-content">
-          <div class="guide-icon">
-            <img src="${checkedIconUri}" alt="Checked" />
-          </div>
+          <div class="guide-icon">${checkedSvg}</div>
           <div class="guide-text">
             <div class="guide-title">Connection Verified</div>
             <div class="guide-desc">Congratulations! You've successfully installed InsForge MCP. Now you can start building your app with InsForge handling backend in your IDE.</div>
@@ -713,20 +695,22 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     function copyPrompt() {
       const promptText = "I'm using InsForge as my backend platform, call InsForge MCP's fetch-docs tool to learn about InsForge instructions.";
       const copyBtn = document.querySelector('.prompt-copy');
-      const copyIcon = copyBtn.querySelector('img');
       
       // Prevent clicking if already copying
       if (copyBtn.disabled) return;
       
+      const copySvgContent = ${JSON.stringify(copySvg)};
+      const checkedSvgContent = ${JSON.stringify(checkedSvg)};
+      
       navigator.clipboard.writeText(promptText).then(() => {
         // Change to checked icon and disable button
         copyBtn.disabled = true;
-        copyIcon.src = "${checkedIconUri}";
+        copyBtn.innerHTML = checkedSvgContent;
         copyBtn.style.opacity = '0.7';
         
         // Restore after 3 seconds
         setTimeout(() => {
-          copyIcon.src = "${copyIconUri}";
+          copyBtn.innerHTML = copySvgContent;
           copyBtn.disabled = false;
           copyBtn.style.opacity = '1';
         }, 3000);
@@ -851,9 +835,13 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     
     .org-name {
       flex: 1;
+      min-width: 0;
       font-size: 14px;
       font-weight: 500;
       line-height: 24px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
     .org-open-btn {
@@ -863,14 +851,19 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       padding: 0px 4px;
       font-size: 12px;
       line-height: 21px;
-      color: var(--vscode-foreground);
-      background: #404040;
+      background-color: #d7d7d7;
+      color: #525252;
       border: none;
       border-radius: 4px;
       cursor: pointer;
       opacity: 0;
       transition: opacity 0.15s ease;
       white-space: nowrap;
+    }
+    
+    body.vscode-dark .org-open-btn {
+      background-color: #262626;
+      color: #A3A3A3;
     }
     
     .org-header:hover .org-open-btn {
@@ -913,8 +906,12 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     
     .project-name {
       flex: 1;
+      min-width: 0;
       font-size: 14px;
       line-height: 24px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
     .project-content {
@@ -970,8 +967,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       padding: 0px 4px;
       font-size: 12px;
       line-height: 21px;
-      color: var(--vscode-button-foreground);
-      background: #404040;
+      background-color: #d7d7d7;
+      color: #525252;
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -979,9 +976,22 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       transition: opacity 0.15s ease;
     }
     
+    body.vscode-dark .install-btn {
+      background-color: #262626;
+      color: #A3A3A3;
+    }
+    
     .install-btn .mcp-icon {
       width: 16px;
       height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .install-btn .mcp-icon svg {
+      width: 100%;
+      height: 100%;
     }
     
     .install-text {
@@ -1056,6 +1066,19 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       width: 40px;
       height: 40px;
       margin-bottom: 12px;
+      color: #525252;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .folder-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    
+    body.vscode-dark .folder-icon {
+      color: #A3A3A3;
     }
     
     .empty-title {
@@ -1126,8 +1149,14 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       align-items: center;
       justify-content: center;
+      color: #000000;
     }
     
+    body.vscode-dark .guide-icon {
+      color: #ffffff;
+    }
+    
+    .guide-icon svg,
     .guide-icon img {
       width: 28px;
       height: 28px;
@@ -1199,7 +1228,8 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       border: none;
       padding: 4px;
       cursor: pointer;
-      background-color: var(--vscode-button-secondaryBackground);
+      background-color: #e5e5e5;
+      color: #525252;
       border-radius: 6px;
       display: flex;
       align-items: center;
@@ -1207,7 +1237,12 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.10);
     }
     
-    .prompt-copy img {
+    body.vscode-dark .prompt-copy {
+      background-color: #262626;
+      color: #A3A3A3;
+    }
+    
+    .prompt-copy svg {
       width: 16px;
       height: 16px;
     }

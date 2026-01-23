@@ -42,7 +42,8 @@
       },
       {
         "command": "insforge.logout",
-        "title": "InsForge: Logout"
+        "title": "Logout",
+        "icon": "$(sign-out)"
       },
       {
         "command": "insforge.selectProject",
@@ -60,12 +61,12 @@
       },
       {
         "command": "insforge.openSubscription",
-        "title": "InsForge: View Subscription",
+        "title": "Subscription",
         "icon": "$(credit-card)"
       },
       {
         "command": "insforge.openUsage",
-        "title": "InsForge: View Usage",
+        "title": "Usage",
         "icon": "$(graph)"
       }
     ],
@@ -87,22 +88,38 @@
         }
       ]
     },
+    "submenus": [
+      {
+        "id": "insforge.userMenu",
+        "label": "User",
+        "icon": "$(account)"
+      }
+    ],
     "menus": {
       "view/title": [
         {
-          "command": "insforge.openSubscription",
+          "submenu": "insforge.userMenu",
           "when": "view == insforge.projectsView",
           "group": "navigation@1"
         },
         {
-          "command": "insforge.openUsage",
-          "when": "view == insforge.projectsView",
-          "group": "navigation@2"
-        },
-        {
           "command": "insforge.refresh",
           "when": "view == insforge.projectsView",
-          "group": "navigation@3"
+          "group": "navigation@2"
+        }
+      ],
+      "insforge.userMenu": [
+        {
+          "command": "insforge.openSubscription",
+          "group": "1_account@1"
+        },
+        {
+          "command": "insforge.openUsage",
+          "group": "1_account@2"
+        },
+        {
+          "command": "insforge.logout",
+          "group": "2_session@1"
         }
       ]
     },
