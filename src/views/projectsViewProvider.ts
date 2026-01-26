@@ -13,6 +13,8 @@ interface McpProjectStatus {
   tools?: string[];
   error?: string;
   lastUpdated: number;
+  clientId?: string;
+  workspaceFolder?: string;
 }
 
 export class ProjectsViewProvider implements vscode.WebviewViewProvider {
@@ -69,17 +71,29 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   /**
    * Update MCP status for a project
    */
-  private async updateMcpStatus(projectId: string, status: McpStatus, tools?: string[], error?: string): Promise<void> {
+  private async updateMcpStatus(
+    projectId: string,
+    status: McpStatus,
+    tools?: string[],
+    error?: string,
+    clientId?: string,
+    workspaceFolder?: string
+  ): Promise<void> {
     if (!this._context) return;
 
     const statuses = this._context.globalState.get<Record<string, McpProjectStatus>>(MCP_STATUS_KEY, {});
+
+    // Preserve existing clientId/workspaceFolder if not provided
+    const existing = statuses[projectId];
 
     statuses[projectId] = {
       projectId,
       status,
       tools,
       error,
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
+      clientId: clientId ?? existing?.clientId,
+      workspaceFolder: workspaceFolder ?? existing?.workspaceFolder,
     };
 
     await this._context.globalState.update(MCP_STATUS_KEY, statuses);
@@ -106,23 +120,35 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   /**
    * Mark a project as verifying MCP (yellow dot)
    */
-  public async markMcpVerifying(projectId: string): Promise<void> {
-    await this.updateMcpStatus(projectId, 'verifying');
+  public async markMcpVerifying(projectId: string, clientId?: string, workspaceFolder?: string): Promise<void> {
+    await this.updateMcpStatus(projectId, 'verifying', undefined, undefined, clientId, workspaceFolder);
   }
 
   /**
    * Mark a project as having verified MCP (green dot)
    */
-  public async markMcpVerified(projectId: string, tools: string[]): Promise<void> {
+  public async markMcpVerified(projectId: string, tools: string[], clientId?: string, workspaceFolder?: string): Promise<void> {
     await this.clearOtherVerifiedStatuses(projectId);
-    await this.updateMcpStatus(projectId, 'verified', tools);
+    await this.updateMcpStatus(projectId, 'verified', tools, undefined, clientId, workspaceFolder);
   }
 
   /**
    * Mark a project as having failed MCP verification (red dot)
    */
-  public async markMcpFailed(projectId: string, error: string): Promise<void> {
-    await this.updateMcpStatus(projectId, 'failed', undefined, error);
+  public async markMcpFailed(projectId: string, error: string, clientId?: string, workspaceFolder?: string): Promise<void> {
+    await this.updateMcpStatus(projectId, 'failed', undefined, error, clientId, workspaceFolder);
+  }
+
+  /**
+   * Get stored client info for a project (for retry)
+   */
+  public getMcpClientInfo(projectId: string): { clientId?: string; workspaceFolder?: string } {
+    const statuses = this.getMcpStatuses();
+    const status = statuses.get(projectId);
+    return {
+      clientId: status?.clientId,
+      workspaceFolder: status?.workspaceFolder,
+    };
   }
 
   /**
@@ -324,6 +350,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
 
     const apiBaseUrl = `https://${project.appkey}.${project.region}.insforge.app`;
 
+    // Get stored client info for retry
+    const { clientId, workspaceFolder } = this.getMcpClientInfo(projectId);
+
     // Import and call retry verification
     const { retryVerification } = await import('../commands/installMcp');
     await retryVerification(
@@ -331,10 +360,12 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       apiKey,
       apiBaseUrl,
       {
-        onVerifying: (pid) => this.markMcpVerifying(pid),
-        onVerified: (pid, tools) => this.markMcpVerified(pid, tools),
-        onFailed: (pid, error) => this.markMcpFailed(pid, error),
-      }
+        onVerifying: (pid) => this.markMcpVerifying(pid, clientId, workspaceFolder),
+        onVerified: (pid, tools) => this.markMcpVerified(pid, tools, clientId, workspaceFolder),
+        onFailed: (pid, error) => this.markMcpFailed(pid, error, clientId, workspaceFolder),
+      },
+      clientId,
+      workspaceFolder
     );
   }
 

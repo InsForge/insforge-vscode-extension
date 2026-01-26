@@ -217,11 +217,11 @@ export function registerCommands(
       }
 
       const success = await installMcp(project, authProvider, context.extensionUri, {
-        onVerifying: (projectId) => {
-          projectsViewProvider.markMcpVerifying(projectId);
+        onVerifying: (projectId, clientId, workspaceFolder) => {
+          projectsViewProvider.markMcpVerifying(projectId, clientId, workspaceFolder);
         },
-        onVerified: async (projectId, tools) => {
-          projectsViewProvider.markMcpVerified(projectId, tools);
+        onVerified: async (projectId, tools, clientId, workspaceFolder) => {
+          projectsViewProvider.markMcpVerified(projectId, tools, clientId, workspaceFolder);
 
           // Start socket listener to wait for real MCP connection
           try {
@@ -233,8 +233,8 @@ export function registerCommands(
             console.error('[installMcp] Failed to start MCP socket listener:', err);
           }
         },
-        onFailed: (projectId, error) => {
-          projectsViewProvider.markMcpFailed(projectId, error);
+        onFailed: (projectId, error, clientId, workspaceFolder) => {
+          projectsViewProvider.markMcpFailed(projectId, error, clientId, workspaceFolder);
         }
       });
     })
