@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
-import { getPostInstallMessage } from '../utils/postInstallation';
+import { buildTerminalOutput, InstallerResult } from '../utils/terminalOutput';
 
 /**
  * MCP installation status
@@ -43,17 +43,6 @@ const MCP_CLIENTS = [
 ] as const;
 
 /**
- * Result of running the installer
- */
-interface InstallerResult {
-  success: boolean;
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  error?: string;
-}
-
-/**
  * Run the MCP installer and wait for it to complete
  */
 async function runInstaller(
@@ -69,6 +58,7 @@ async function runInstaller(
       '--client', clientId,
       '--env', `API_KEY=${apiKey}`,
       '--env', `API_BASE_URL=${apiBaseUrl}`,
+      '-y'
     ];
 
     const spawnOptions: { cwd?: string; shell: boolean; env: NodeJS.ProcessEnv } = {
@@ -226,27 +216,37 @@ export async function installMcp(
       }
     );
 
-    // Step 7: Check installer result
+    // Step 7: Build terminal output message
+    // Always show terminal with installation output for better user experience
+    const terminalOutput = buildTerminalOutput(
+      installerResult,
+      clientPick.label,
+      clientPick.id
+    );
+
+    const terminal = vscode.window.createTerminal({
+      name: `InsForge MCP - ${clientPick.label}`,
+      message: terminalOutput.replace(/\n/g, '\r\n'), // Terminal needs \r\n for proper line breaks
+    });
+    terminal.show();
+
+    // Step 8: Check installer result
     if (!installerResult.success) {
-      statusCallbacks?.onFailed?.(project.id, installerResult.error || `Installer exited with code ${installerResult.exitCode}`);
+      const errorMsg = installerResult.error || `Installer exited with code ${installerResult.exitCode}`;
+      statusCallbacks?.onFailed?.(project.id, errorMsg);
       vscode.window.showErrorMessage(
-        `MCP installation failed: ${installerResult.error || `Exit code ${installerResult.exitCode}`}`,
-        'Retry'
+        `MCP installation failed: ${errorMsg}`,
+        'Retry',
+        'View Terminal'
       ).then(selection => {
         if (selection === 'Retry') {
           vscode.commands.executeCommand('insforge.installMcp');
+        } else if (selection === 'View Terminal') {
+          terminal.show();
         }
       });
       return false;
     }
-
-    // Step 8: Show post-installation message in terminal (real terminal, stays interactive)
-    const message = getPostInstallMessage(clientPick.label);
-    const terminal = vscode.window.createTerminal({
-      name: `InsForge MCP - ${clientPick.label}`,
-      message: message.replace(/\n/g, '\r\n'), // Terminal needs \r\n for proper line breaks
-    });
-    terminal.show();
 
     // Step 9: Verify MCP connection using the credentials directly
     verifyMcpInstallation(
