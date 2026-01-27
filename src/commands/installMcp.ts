@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
+import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
+import { buildTerminalOutput, InstallerResult } from '../utils/terminalOutput';
 
 /**
  * MCP installation status
@@ -21,24 +23,100 @@ export interface McpStatusCallbacks {
  */
 function isDarkTheme(): boolean {
   const theme = vscode.window.activeColorTheme;
-  return theme.kind === vscode.ColorThemeKind.Dark || 
-         theme.kind === vscode.ColorThemeKind.HighContrast;
+  return theme.kind === vscode.ColorThemeKind.Dark ||
+    theme.kind === vscode.ColorThemeKind.HighContrast;
 }
 
 // Supported MCP clients from @insforge/install
 const MCP_CLIENTS = [
   { id: 'cursor', label: 'Cursor', description: 'Cursor IDE (~/.cursor/mcp.json)', projectLocal: false, icon: 'cursor' },
   { id: 'claude-code', label: 'Claude Code', description: 'Project-local (.mcp.json in workspace)', projectLocal: true, icon: 'claude_code' },
-  { id: 'antigravity', label: 'Google Antigravity', description: 'Project-local (~/.gemini/antigravity/mcp_config.json)', projectLocal: true, icon: 'antigravity' },
-  { id: 'windsurf', label: 'Windsurf', description: 'Windsurf IDE (~/.codeium/windsurf/)', projectLocal: false, icon: 'windsurf' },
-  { id: 'cline', label: 'Cline', description: 'Cline VS Code Extension', projectLocal: false, icon: 'cline' },
-  { id: 'roocode', label: 'Roo Code', description: 'Roo-Code VS Code Extension', projectLocal: false, icon: 'roo_code' },
+  { id: 'antigravity', label: 'Google Antigravity', description: 'Google Antigravity (~/.gemini/antigravity/mcp_config.json)', projectLocal: false, icon: 'antigravity' },
+  { id: 'windsurf', label: 'Windsurf', description: 'Windsurf IDE (~/.codeium/windsurf/mcp_config.json)', projectLocal: false, icon: 'windsurf' },
+  { id: 'cline', label: 'Cline', description: 'Cline VS Code Extension (VS Code globalStorage)', projectLocal: false, icon: 'cline' },
+  { id: 'roocode', label: 'Roo Code', description: 'Roo-Code VS Code Extension (VS Code globalStorage)', projectLocal: false, icon: 'roo_code' },
   { id: 'copilot', label: 'GitHub Copilot', description: 'Project-local (.vscode/mcp.json)', projectLocal: true, icon: 'copilot' },
-  { id: 'codex', label: 'Codex', description: 'OpenAI Codex CLI', projectLocal: false, icon: 'codex' },
-  { id: 'trae', label: 'Trae', description: 'Trae IDE', projectLocal: false, icon: 'trae' },
-  { id: 'qoder', label: 'Qoder', description: 'Qoder IDE', projectLocal: false, icon: 'qoder' },
-  { id: 'kiro', label: 'Kiro', description: 'Kiro IDE', projectLocal: false, icon: 'kiro' },
+  { id: 'codex', label: 'Codex', description: 'OpenAI Codex CLI (managed via codex mcp add)', projectLocal: false, icon: 'codex' },
+  { id: 'trae', label: 'Trae', description: 'Trae IDE (Trae/User/mcp.json)', projectLocal: false, icon: 'trae' },
+  { id: 'qoder', label: 'Qoder', description: 'Qoder IDE (Qoder/SharedClientCache/mcp.json)', projectLocal: false, icon: 'qoder' },
+  { id: 'kiro', label: 'Kiro', description: 'Kiro IDE (~/.kiro/settings/mcp.json)', projectLocal: false, icon: 'kiro' },
 ] as const;
+
+/**
+ * Run the MCP installer and wait for it to complete
+ */
+async function runInstaller(
+  clientId: string,
+  apiKey: string,
+  apiBaseUrl: string,
+  workspaceFolder?: string,
+  cancellationToken?: vscode.CancellationToken
+): Promise<InstallerResult> {
+  return new Promise((resolve) => {
+    const args = [
+      '@insforge/install',
+      '--client', clientId,
+      '--env', `API_KEY=${apiKey}`,
+      '--env', `API_BASE_URL=${apiBaseUrl}`,
+      '-y'
+    ];
+
+    const spawnOptions: { cwd?: string; shell: boolean; env: NodeJS.ProcessEnv } = {
+      shell: true,
+      env: { ...process.env },
+    };
+
+    if (workspaceFolder) {
+      spawnOptions.cwd = workspaceFolder;
+    }
+
+    const installerProcess = spawn('npx', args, spawnOptions);
+
+    let stdout = '';
+    let stderr = '';
+
+    installerProcess.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    installerProcess.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    installerProcess.on('error', (err: Error) => {
+      resolve({
+        success: false,
+        exitCode: null,
+        stdout,
+        stderr,
+        error: err.message,
+      });
+    });
+
+    installerProcess.on('close', (code: number | null) => {
+      resolve({
+        success: code === 0,
+        exitCode: code,
+        stdout,
+        stderr,
+      });
+    });
+
+    // Handle cancellation
+    if (cancellationToken) {
+      cancellationToken.onCancellationRequested(() => {
+        installerProcess.kill();
+        resolve({
+          success: false,
+          exitCode: null,
+          stdout,
+          stderr,
+          error: 'Installation cancelled',
+        });
+      });
+    }
+  });
+}
 
 export async function installMcp(
   project: Project,
@@ -49,7 +127,7 @@ export async function installMcp(
   try {
     // Step 1: Let user pick which client to install for
     const iconSuffix = isDarkTheme() ? '' : '-light';
-    
+
     const clientPick = await vscode.window.showQuickPick(
       MCP_CLIENTS.map(client => ({
         label: client.label,
@@ -102,17 +180,6 @@ export async function installMcp(
         }
         workspaceFolder = folderPick.folder.uri.fsPath;
       }
-
-      // Confirm with user
-      const confirm = await vscode.window.showInformationMessage(
-        `Install InsForge MCP config to: ${workspaceFolder}?`,
-        'Yes',
-        'Cancel'
-      );
-
-      if (confirm !== 'Yes') {
-        return false;
-      }
     }
 
     // Step 3: Get API key for this project
@@ -125,33 +192,63 @@ export async function installMcp(
     // Step 4: Build the API base URL
     const apiBaseUrl = `https://${project.appkey}.${project.region}.insforge.app`;
 
-    // Build the MCP installer command
-    const mcpCommand = buildMcpInstallerCommand(clientPick.id, apiKey, apiBaseUrl);
-
-    // Create terminal with proper working directory
-    const terminalOptions: vscode.TerminalOptions = {
-      name: `InsForge MCP - ${clientPick.label}`,
-      hideFromUser: false,
-    };
-
-    // Set cwd for project-local clients
-    if (workspaceFolder) {
-      terminalOptions.cwd = workspaceFolder;
-    }
-
-    const terminal = vscode.window.createTerminal(terminalOptions);
-    terminal.show();
-    terminal.sendText(mcpCommand);
-
-    const location = workspaceFolder ? ` in ${workspaceFolder}` : '';
-    vscode.window.showInformationMessage(
-      `MCP installer started for ${clientPick.label}${location}. Verifying server connection...`
-    );
-
-    // Immediately mark as verifying (yellow dot)
+    // Step 5: Mark as verifying (yellow dot)
     statusCallbacks?.onVerifying?.(project.id);
 
-    // Start verification in background
+    // Step 6: Run installer with progress
+    const installerResult = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Installing InsForge MCP for ${clientPick.label}...`,
+        cancellable: true,
+      },
+      async (progress, token) => {
+        progress.report({ message: 'Running installer...' });
+
+        // Run the installer and wait for it to complete
+        return await runInstaller(
+          clientPick.id,
+          apiKey,
+          apiBaseUrl,
+          workspaceFolder,
+          token
+        );
+      }
+    );
+
+    // Step 7: Build terminal output message
+    // Always show terminal with installation output for better user experience
+    const terminalOutput = buildTerminalOutput(
+      installerResult,
+      clientPick.label,
+      clientPick.id
+    );
+
+    const terminal = vscode.window.createTerminal({
+      name: `InsForge MCP - ${clientPick.label}`,
+      message: terminalOutput.replace(/\n/g, '\r\n'), // Terminal needs \r\n for proper line breaks
+    });
+    terminal.show();
+
+    // Step 8: Check installer result
+    if (!installerResult.success) {
+      const errorMsg = installerResult.error || `Installer exited with code ${installerResult.exitCode}`;
+      statusCallbacks?.onFailed?.(project.id, errorMsg);
+      vscode.window.showErrorMessage(
+        `MCP installation failed: ${errorMsg}`,
+        'Retry',
+        'View Terminal'
+      ).then(selection => {
+        if (selection === 'Retry') {
+          vscode.commands.executeCommand('insforge.installMcp');
+        } else if (selection === 'View Terminal') {
+          terminal.show();
+        }
+      });
+      return false;
+    }
+
+    // Step 9: Verify MCP connection using the credentials directly
     verifyMcpInstallation(
       apiKey,
       apiBaseUrl,
@@ -166,7 +263,6 @@ export async function installMcp(
             'View Tools'
           ).then(selection => {
             if (selection === 'View Tools') {
-              // Show tools in a quick pick for info
               vscode.window.showQuickPick(
                 tools.map(t => ({ label: t })),
                 { placeHolder: 'Available MCP Tools', canPickMany: false }
@@ -181,7 +277,6 @@ export async function installMcp(
             'Retry Verification'
           ).then(selection => {
             if (selection === 'Retry Verification') {
-              // Trigger re-verification
               retryVerification(project.id, apiKey, apiBaseUrl, statusCallbacks);
             }
           });
@@ -193,6 +288,7 @@ export async function installMcp(
 
     return true;
   } catch (error) {
+    statusCallbacks?.onFailed?.(project.id, String(error));
     vscode.window.showErrorMessage(`Failed to install MCP: ${error}`);
     return false;
   }
@@ -208,8 +304,8 @@ export async function retryVerification(
   statusCallbacks?: McpStatusCallbacks
 ): Promise<void> {
   statusCallbacks?.onVerifying?.(projectId);
-  
-  const result = await verifyMcpInstallation(
+
+  await verifyMcpInstallation(
     apiKey,
     apiBaseUrl,
     {
@@ -226,9 +322,4 @@ export async function retryVerification(
     5,   // fewer attempts for retry
     2000
   );
-}
-
-function buildMcpInstallerCommand(client: string, apiKey: string, apiBaseUrl: string): string {
-  // Using the @insforge/install package
-  return `npx @insforge/install --client ${client} --env API_KEY=${apiKey} --env API_BASE_URL=${apiBaseUrl}`;
 }
