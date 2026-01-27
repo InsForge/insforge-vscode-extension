@@ -240,20 +240,11 @@ export async function installMcp(
       return false;
     }
 
-    // Step 8: Show post-installation message in terminal
+    // Step 8: Show post-installation message in terminal (real terminal, stays interactive)
     const message = getPostInstallMessage(clientPick.label);
-    const writeEmitter = new vscode.EventEmitter<string>();
-    const pty: vscode.Pseudoterminal = {
-      onDidWrite: writeEmitter.event,
-      open: () => {
-        const terminalMessage = message.replace(/\n/g, '\r\n');
-        writeEmitter.fire(terminalMessage);
-      },
-      close: () => {},
-    };
     const terminal = vscode.window.createTerminal({
       name: `InsForge MCP - ${clientPick.label}`,
-      pty,
+      message: message.replace(/\n/g, '\r\n'), // Terminal needs \r\n for proper line breaks
     });
     terminal.show();
 
