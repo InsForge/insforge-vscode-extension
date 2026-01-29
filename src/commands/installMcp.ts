@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
 import { buildTerminalOutput, InstallerResult } from '../utils/terminalOutput';
-import { tryOpenChatWithPrompt } from '../utils/chatOpener';
+import { tryOpenChatWithPrompt, usesTerminalChat } from '../utils/chatOpener';
 
 /**
  * MCP installation status
@@ -262,7 +262,9 @@ export async function installMcp(
           statusCallbacks?.onVerified?.(project.id, tools);
           
           // Try to open AI chat with welcome prompt
-          await tryOpenChatWithPrompt(selectedClientId);
+          // For terminal-based agents (claude-code, codex), reuse the installation terminal
+          const chatOptions = usesTerminalChat(selectedClientId) ? { terminal } : undefined;
+          await tryOpenChatWithPrompt(selectedClientId, undefined, chatOptions);
           
           vscode.window.showInformationMessage(
             `MCP server verified! ${tools.length} tools available.`,

@@ -10,15 +10,18 @@ export const INSFORGE_WELCOME_PROMPT =
  * Chat command configuration for each supported IDE/client
  */
 interface ChatCommandConfig {
-  /** The VSCode command to execute (empty string = no chat support) */
-  command: string;
   /** 
    * Parameter format:
    * - 'object': pass {query, isPartialQuery} directly (Cursor, VSCode Copilot)
    * - 'clipboard': copy to clipboard, open chat, wait, paste (most other IDEs are broken)
-   * - undefined: just open chat without any prompt
+   * - 'terminal': run command in terminal (Claude Code, Codex)
+   * - undefined: silently skip
    */
-  paramFormat?: 'object' | 'clipboard';
+  paramFormat?: 'object' | 'clipboard' | 'terminal';
+  /** The VSCode command to execute (for 'object' and 'clipboard' modes) */
+  command?: string;
+  /** CLI command name to run in terminal (for 'terminal' mode, e.g., 'claude', 'codex') */
+  terminalCommand?: string;
   /** Custom paste delay in ms for clipboard method (default: 150ms) */
   pasteDelayMs?: number;
   /** 
@@ -86,11 +89,19 @@ const CHAT_COMMANDS: Record<string, ChatCommandConfig> = {
     pasteDelayMs: 1000,
   },
 
+  // Terminal-based agents - run command in terminal
+  'claude-code': {
+    paramFormat: 'terminal',
+    terminalCommand: 'claude',
+  },
+  'codex': {
+    paramFormat: 'terminal',
+    terminalCommand: 'codex',
+  },
+
   // No chat integration - silently skip
-  'claude-code': { command: '' },
-  'cline': { command: '' },
-  'roocode': { command: '' },
-  'codex': { command: '' },
+  'cline': {},
+  'roocode': {},
 };
 
 /**
@@ -98,8 +109,16 @@ const CHAT_COMMANDS: Record<string, ChatCommandConfig> = {
  */
 export interface ChatOpenResult {
   success: boolean;
-  method: 'command' | 'clipboard' | 'none';
+  method: 'command' | 'clipboard' | 'terminal' | 'none';
   error?: string;
+}
+
+/**
+ * Options for tryOpenChatWithPrompt
+ */
+export interface ChatOpenOptions {
+  /** Terminal to use for terminal-based agents (claude-code, codex) */
+  terminal?: vscode.Terminal;
 }
 
 /**
@@ -107,24 +126,26 @@ export interface ChatOpenResult {
  * 
  * @param clientId - The MCP client ID (e.g., 'cursor', 'copilot', etc.)
  * @param prompt - Optional custom prompt (defaults to INSFORGE_WELCOME_PROMPT)
+ * @param options - Optional settings like terminal reference for terminal-based agents
  * @returns Result indicating success and method used
  */
 export async function tryOpenChatWithPrompt(
   clientId: string,
-  prompt: string = INSFORGE_WELCOME_PROMPT
+  prompt: string = INSFORGE_WELCOME_PROMPT,
+  options?: ChatOpenOptions
 ): Promise<ChatOpenResult> {
   const config = CHAT_COMMANDS[clientId];
 
-  // No config or no command = silently skip
-  if (!config || !config.command) {
-    console.debug(`[chatOpener] No chat command for ${clientId}, skipping`);
+  // No config or no paramFormat = silently skip
+  if (!config || !config.paramFormat) {
+    console.debug(`[chatOpener] No chat config for ${clientId}, skipping`);
     return { success: true, method: 'none' };
   }
 
   try {
     if (config.paramFormat === 'object') {
       // Direct query injection (Cursor, VSCode Copilot)
-      await vscode.commands.executeCommand(config.command, {
+      await vscode.commands.executeCommand(config.command!, {
         query: prompt,
         isPartialQuery: true,
       });
@@ -132,18 +153,22 @@ export async function tryOpenChatWithPrompt(
     } else if (config.paramFormat === 'clipboard') {
       // Clipboard workaround for broken IDEs
       return await openChatWithClipboardPaste(
-        config.command, 
-        prompt, 
+        config.command!,
+        prompt,
         config.pasteDelayMs,
         config.skipCommandIfContext
       );
+    } else if (config.paramFormat === 'terminal') {
+      return await openChatWithTerminal(
+        config.terminalCommand!,
+        prompt,
+        options?.terminal
+      );
     } else {
-      // No params - just open chat
-      await vscode.commands.executeCommand(config.command);
-      return { success: true, method: 'command' };
+      return { success: true, method: 'none' };
     }
   } catch (error) {
-    console.error(`[chatOpener] Failed to execute ${config.command}:`, error);
+    console.error(`[chatOpener] Failed for ${clientId}:`, error);
     return { success: false, method: 'none', error: String(error) };
   }
 }
@@ -213,7 +238,7 @@ async function openChatWithClipboardPaste(
   // Step 4 & 5: Wait then paste
   // If we skipped the command, use a shorter delay since chat is already open
   const actualDelay = shouldSkipCommand ? 50 : pasteDelay;
-  
+
   return new Promise((resolve) => {
     setTimeout(async () => {
       try {
@@ -234,11 +259,37 @@ async function openChatWithClipboardPaste(
 }
 
 /**
+ * Open chat using terminal command.
+ * For CLI-based agents like Claude Code and Codex.
+ * Sends: `{command} "{prompt}"` to the terminal.
+ */
+async function openChatWithTerminal(
+  terminalCommand: string,
+  prompt: string,
+  existingTerminal?: vscode.Terminal
+): Promise<ChatOpenResult> {
+  // Escape double quotes in prompt for shell safety
+  const escapedPrompt = prompt.replace(/"/g, '\\"');
+  const fullCommand = `${terminalCommand} "${escapedPrompt}"`;
+
+  // Use existing terminal or create a new one
+  const terminal = existingTerminal ?? vscode.window.createTerminal({
+    name: `InsForge - ${terminalCommand}`,
+  });
+
+  terminal.show();
+  terminal.sendText(fullCommand);
+  
+  console.debug(`[chatOpener] Sent to terminal: ${fullCommand}`);
+  return { success: true, method: 'terminal' };
+}
+
+/**
  * Check if a client has chat command support
  */
 export function hasNativeChatSupport(clientId: string): boolean {
   const config = CHAT_COMMANDS[clientId];
-  return !!(config && config.command);
+  return !!(config && config.paramFormat);
 }
 
 /**
@@ -246,4 +297,12 @@ export function hasNativeChatSupport(clientId: string): boolean {
  */
 export function getChatCommand(clientId: string): string | null {
   return CHAT_COMMANDS[clientId]?.command || null;
+}
+
+/**
+ * Check if a client uses terminal-based chat (Claude Code, Codex)
+ */
+export function usesTerminalChat(clientId: string): boolean {
+  const config = CHAT_COMMANDS[clientId];
+  return config?.paramFormat === 'terminal';
 }
