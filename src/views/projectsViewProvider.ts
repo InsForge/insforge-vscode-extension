@@ -229,9 +229,6 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     // Reset guide card state (so it doesn't show "completed")
     await this._context.globalState.update(MCP_REAL_CONNECTED_KEY, false);
     
-    // Refresh the view
-    this.refresh();
-    
     console.debug('[ProjectsViewProvider] Reset MCP states for new installation');
   }
 

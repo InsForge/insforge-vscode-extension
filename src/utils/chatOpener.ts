@@ -14,22 +14,17 @@ interface ChatCommandConfig {
    * Parameter format:
    * - 'object': pass {query, isPartialQuery} directly (Cursor, VSCode Copilot)
    * - 'clipboard': copy to clipboard, open chat, wait, paste (most other IDEs are broken)
+   * - 'clipboard-only': just copy to clipboard and notify user (for IDEs with broken commands)
    * - 'terminal': run command in terminal (Claude Code, Codex)
    * - undefined: silently skip
    */
-  paramFormat?: 'object' | 'clipboard' | 'terminal';
+  paramFormat?: 'object' | 'clipboard' | 'clipboard-only' | 'terminal';
   /** The VSCode command to execute (for 'object' and 'clipboard' modes) */
   command?: string;
   /** CLI command name to run in terminal (for 'terminal' mode, e.g., 'claude', 'codex') */
   terminalCommand?: string;
   /** Custom paste delay in ms for clipboard method (default: 150ms) */
   pasteDelayMs?: number;
-  /** 
-   * Context key to check before running command. 
-   * If this context is true, skip the open command and just paste directly.
-   * Useful for IDEs where the open command is a toggle (like Qoder).
-   */
-  skipCommandIfContext?: string;
 }
 
 /** Default delay before pasting for clipboard method */
@@ -63,11 +58,9 @@ const CHAT_COMMANDS: Record<string, ChatCommandConfig> = {
     paramFormat: 'clipboard',
   },
 
-  // Qoder IDE - open command is a toggle, so check if chat is already open
+  // Qoder IDE - chat command is unreliable, just copy to clipboard and notify
   'qoder': {
-    command: 'workbench.action.aichat.open',
-    paramFormat: 'clipboard',
-    skipCommandIfContext: 'inChat',
+    paramFormat: 'clipboard-only',
   },
 
   // Google Antigravity
@@ -155,9 +148,11 @@ export async function tryOpenChatWithPrompt(
       return await openChatWithClipboardPaste(
         config.command!,
         prompt,
-        config.pasteDelayMs,
-        config.skipCommandIfContext
+        config.pasteDelayMs
       );
+    } else if (config.paramFormat === 'clipboard-only') {
+      // Just copy to clipboard and notify user (for IDEs with broken commands)
+      return await copyToClipboardAndNotify(prompt);
     } else if (config.paramFormat === 'terminal') {
       return await openChatWithTerminal(
         config.terminalCommand!,
@@ -174,33 +169,33 @@ export async function tryOpenChatWithPrompt(
 }
 
 /**
- * Try to get a context key value using the unofficial getContext command.
- * Returns undefined if the context cannot be read.
+ * Just copy the prompt to clipboard and show a notification.
+ * For IDEs where the chat command is broken/unreliable.
  */
-async function getContextValue(contextKey: string): Promise<boolean | undefined> {
-  try {
-    const value = await vscode.commands.executeCommand('getContext', contextKey);
-    console.debug(`[chatOpener] Context '${contextKey}' = ${value}`);
-    return value as boolean | undefined;
-  } catch (error) {
-    console.debug(`[chatOpener] Failed to get context '${contextKey}':`, error);
-    return undefined;
-  }
+async function copyToClipboardAndNotify(prompt: string): Promise<ChatOpenResult> {
+  await vscode.env.clipboard.writeText(prompt);
+  console.debug('[chatOpener] Copied prompt to clipboard (clipboard-only mode)');
+  
+  vscode.window.showInformationMessage(
+    'Prompt copied to clipboard. Please open the AI chat and paste it.',
+    'OK'
+  );
+  
+  return { success: true, method: 'clipboard' };
 }
 
 /**
  * Open chat using clipboard + paste workaround.
  * Most IDEs don't properly support query injection, so we have to:
  * 1. Copy prompt to clipboard
- * 2. Open chat (unless skipCommandIfContext is true)
+ * 2. Open chat
  * 3. Wait for UI
  * 4. Paste
  */
 async function openChatWithClipboardPaste(
   command: string,
   prompt: string,
-  delayMs?: number,
-  skipCommandIfContext?: string
+  delayMs?: number
 ): Promise<ChatOpenResult> {
   const pasteDelay = delayMs ?? DEFAULT_PASTE_DELAY_MS;
 
@@ -208,37 +203,22 @@ async function openChatWithClipboardPaste(
   await vscode.env.clipboard.writeText(prompt);
   console.debug('[chatOpener] Copied prompt to clipboard');
 
-  // Step 2: Check if we should skip the open command (e.g., chat already open)
-  let shouldSkipCommand = false;
-  if (skipCommandIfContext) {
-    const contextValue = await getContextValue(skipCommandIfContext);
-    if (contextValue === true) {
-      console.debug(`[chatOpener] Context '${skipCommandIfContext}' is true, skipping command`);
-      shouldSkipCommand = true;
-    }
+  // Step 2: Try to open chat
+  try {
+    console.debug(`[chatOpener] Opening chat command: ${command}`);
+    await vscode.commands.executeCommand(command);
+    console.debug('[chatOpener] Opened chat');
+  } catch (error) {
+    // Command failed - tell user to open chat manually and paste
+    console.error('[chatOpener] Failed to open chat:', error);
+    vscode.window.showInformationMessage(
+      'Prompt copied to clipboard. Please open the AI chat and paste it.',
+      'OK'
+    );
+    return { success: true, method: 'clipboard' };
   }
 
-  // Step 3: Try to open chat (unless skipped)
-  if (!shouldSkipCommand) {
-    try {
-      console.debug(`[chatOpener] Opening chat command: ${command}`);
-      await vscode.commands.executeCommand(command);
-      console.debug('[chatOpener] Opened chat');
-    } catch (error) {
-      // Command failed - tell user to open chat manually and paste
-      console.error('[chatOpener] Failed to open chat:', error);
-      vscode.window.showInformationMessage(
-        'Prompt copied to clipboard. Please open the AI chat and paste it.',
-        'OK'
-      );
-      return { success: true, method: 'clipboard' };
-    }
-  }
-
-  // Step 4 & 5: Wait then paste
-  // If we skipped the command, use a shorter delay since chat is already open
-  const actualDelay = shouldSkipCommand ? 50 : pasteDelay;
-
+  // Step 3 & 4: Wait then paste
   return new Promise((resolve) => {
     setTimeout(async () => {
       try {
@@ -254,7 +234,7 @@ async function openChatWithClipboardPaste(
         );
         resolve({ success: true, method: 'clipboard' });
       }
-    }, actualDelay);
+    }, pasteDelay);
   });
 }
 
@@ -279,7 +259,7 @@ async function openChatWithTerminal(
 
   terminal.show();
   terminal.sendText(fullCommand);
-  
+
   console.debug(`[chatOpener] Sent to terminal: ${fullCommand}`);
   return { success: true, method: 'terminal' };
 }
