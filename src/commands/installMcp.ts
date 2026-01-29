@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
 import { buildTerminalOutput, InstallerResult } from '../utils/terminalOutput';
+import { tryOpenChatWithPrompt } from '../utils/chatOpener';
 
 /**
  * MCP installation status
@@ -249,6 +250,7 @@ export async function installMcp(
     }
 
     // Step 9: Verify MCP connection using the credentials directly
+    const selectedClientId = clientPick.id;
     verifyMcpInstallation(
       apiKey,
       apiBaseUrl,
@@ -256,8 +258,12 @@ export async function installMcp(
         onVerifying: () => {
           // Already notified above
         },
-        onVerified: (tools) => {
+        onVerified: async (tools) => {
           statusCallbacks?.onVerified?.(project.id, tools);
+          
+          // Try to open AI chat with welcome prompt
+          await tryOpenChatWithPrompt(selectedClientId);
+          
           vscode.window.showInformationMessage(
             `MCP server verified! ${tools.length} tools available.`,
             'View Tools'
