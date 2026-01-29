@@ -214,6 +214,28 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Reset MCP states when starting a new installation.
+   * Clears all project MCP statuses and resets the guide card state.
+   */
+  public async resetMcpStatesForNewInstallation(): Promise<void> {
+    if (!this._context) return;
+    
+    // Stop all socket listeners
+    this.stopAllSocketListeners();
+    
+    // Clear all MCP statuses (removes all green/yellow/red dots)
+    await this._context.globalState.update(MCP_STATUS_KEY, {});
+    
+    // Reset guide card state (so it doesn't show "completed")
+    await this._context.globalState.update(MCP_REAL_CONNECTED_KEY, false);
+    
+    // Refresh the view
+    this.refresh();
+    
+    console.debug('[ProjectsViewProvider] Reset MCP states for new installation');
+  }
+
+  /**
    * Clear all extension state (for testing)
    */
   public async clearAllState(): Promise<void> {
