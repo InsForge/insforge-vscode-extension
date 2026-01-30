@@ -417,11 +417,11 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       const escapedOrgName = this._escapeHtml(org.name);
 
       if (projects.length === 0) {
-        // Empty state for org with no projects
+        // Empty state for org with no projects - collapsed by default
         return `
           <div class="org-section">
             <div class="org-header" onclick="toggleOrg('${org.id}')">
-              <span class="codicon codicon-chevron-down" id="chevron-${org.id}"></span>
+              <span class="codicon codicon-chevron-right" id="chevron-${org.id}"></span>
               <span class="codicon codicon-organization"></span>
               <span class="org-name" title="${escapedOrgName}">${escapedOrgName}</span>
               <button class="org-open-btn" onclick="event.stopPropagation(); openInInsforge('${org.id}')" title="Open in InsForge">
@@ -429,7 +429,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
                 <span class="codicon codicon-link-external"></span>
               </button>
             </div>
-            <div class="org-content" id="content-${org.id}">
+            <div class="org-content collapsed" id="content-${org.id}">
               <div class="empty-state">
                 <div class="folder-icon">${folderSvg}</div>
                 <p class="empty-title">No Projects Yet</p>
