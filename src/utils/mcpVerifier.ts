@@ -165,21 +165,14 @@ export async function testMcpConnection(
 }
 
 /**
- * Verify MCP installation with retry logic.
- * Polls the MCP server until it responds with a tool list or max attempts reached.
+ * Verify MCP installation.
  */
 export async function verifyMcpInstallation(
   apiKey: string,
   apiBaseUrl: string,
   callbacks: McpVerificationCallbacks,
-  maxAttempts: number = 10,
-  delayMs: number = 2000
 ): Promise<McpVerificationResult> {
   callbacks.onVerifying?.();
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // Wait before each attempt (including first one to allow npx install to complete)
-    await sleep(delayMs);
 
     const result = await testMcpConnection(apiKey, apiBaseUrl);
     
@@ -188,16 +181,5 @@ export async function verifyMcpInstallation(
       return result;
     }
 
-    // Log attempt for debugging
-    console.log(`MCP verification attempt ${attempt}/${maxAttempts}: ${result.error || 'No response'}`);
-  }
-
-  // All attempts failed
-  const error = 'Failed to verify MCP server after maximum attempts';
-  callbacks.onFailed?.(error);
-  return { success: false, error };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return { success: false, error: result.error || 'No response' };
 }

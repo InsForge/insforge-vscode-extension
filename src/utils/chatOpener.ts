@@ -265,21 +265,6 @@ async function openChatWithTerminal(
 }
 
 /**
- * Check if a client has chat command support
- */
-export function hasNativeChatSupport(clientId: string): boolean {
-  const config = CHAT_COMMANDS[clientId];
-  return !!(config && config.paramFormat);
-}
-
-/**
- * Get the chat command for a specific client (for debugging)
- */
-export function getChatCommand(clientId: string): string | null {
-  return CHAT_COMMANDS[clientId]?.command || null;
-}
-
-/**
  * Check if a client uses terminal-based chat (Claude Code, Codex)
  */
 export function usesTerminalChat(clientId: string): boolean {
