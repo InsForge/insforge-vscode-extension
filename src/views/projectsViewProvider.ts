@@ -216,6 +216,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     await this._context.globalState.update(MCP_REAL_CONNECTED_KEY, false);
     
     console.debug('[ProjectsViewProvider] Reset MCP states for new installation');
+    this.refresh();
   }
 
   /**

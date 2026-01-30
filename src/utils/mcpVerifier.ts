@@ -174,12 +174,14 @@ export async function verifyMcpInstallation(
 ): Promise<McpVerificationResult> {
   callbacks.onVerifying?.();
 
-    const result = await testMcpConnection(apiKey, apiBaseUrl);
-    
-    if (result.success && result.tools) {
-      callbacks.onVerified?.(result.tools);
-      return result;
-    }
+  const result = await testMcpConnection(apiKey, apiBaseUrl);
 
-  return { success: false, error: result.error || 'No response' };
+  if (result.success && result.tools) {
+    callbacks.onVerified?.(result.tools);
+    return result;
+  }
+
+  const error = result.error || 'No response';
+  callbacks.onFailed?.(error);
+  return { success: false, error };
 }
