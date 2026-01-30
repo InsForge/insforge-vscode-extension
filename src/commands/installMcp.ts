@@ -30,6 +30,11 @@ function isDarkTheme(): boolean {
     theme.kind === vscode.ColorThemeKind.HighContrast;
 }
 
+// MCP verification constants
+const MCP_VERIFY_MAX_ATTEMPTS = 3;
+const MCP_VERIFY_DELAY_MS = 2000;
+const MCP_RETRY_MAX_ATTEMPTS = 3;
+
 // Supported MCP clients from @insforge/install
 const MCP_CLIENTS = [
   { id: 'cursor', label: 'Cursor', description: 'Cursor IDE (~/.cursor/mcp.json)', projectLocal: false, icon: 'cursor' },
@@ -255,21 +260,17 @@ export async function installMcp(
     }
 
     // Step 9: Verify MCP connection using the credentials directly
-    const selectedClientId = clientPick.id;
     verifyMcpInstallation(
       apiKey,
       apiBaseUrl,
       {
-        onVerifying: () => {
-          // Already notified above
-        },
         onVerified: async (tools) => {
           statusCallbacks?.onVerified?.(project.id, tools);
           
           // Try to open AI chat with welcome prompt
           // For terminal-based agents (claude-code, codex), reuse the installation terminal
-          const chatOptions = usesTerminalChat(selectedClientId) ? { terminal } : undefined;
-          await tryOpenChatWithPrompt(selectedClientId, undefined, chatOptions);
+          const chatOptions = usesTerminalChat(clientPick.id) ? { terminal } : undefined;
+          await tryOpenChatWithPrompt(clientPick.id, undefined, chatOptions);
           
           vscode.window.showInformationMessage(
             `MCP server verified! ${tools.length} tools available.`,
@@ -295,8 +296,8 @@ export async function installMcp(
           });
         }
       },
-      10,  // maxAttempts
-      2000 // delayMs between attempts
+      MCP_VERIFY_MAX_ATTEMPTS,
+      MCP_VERIFY_DELAY_MS
     );
 
     return true;
@@ -332,7 +333,7 @@ export async function retryVerification(
         vscode.window.showErrorMessage(`MCP verification failed: ${error}`);
       }
     },
-    5,   // fewer attempts for retry
-    2000
+    MCP_RETRY_MAX_ATTEMPTS,
+    MCP_VERIFY_DELAY_MS
   );
 }
