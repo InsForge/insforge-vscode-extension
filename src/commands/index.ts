@@ -178,9 +178,9 @@ export function registerCommands(
       }
 
       const success = await installMcp(project, authProvider, context.extensionUri, {
-        onInstallationStarting: () => {
+        onInstallationStarting: async () => {
           // Reset all MCP states and guide card when starting new installation
-          projectsViewProvider.resetMcpStatesForNewInstallation();
+          await projectsViewProvider.resetMcpStatesForNewInstallation();
         },
         onVerifying: (projectId) => {
           projectsViewProvider.markMcpVerifying(projectId);

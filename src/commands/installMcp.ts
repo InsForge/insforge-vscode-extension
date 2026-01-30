@@ -15,7 +15,7 @@ export type McpStatus = 'none' | 'verifying' | 'verified' | 'failed';
  */
 export interface McpStatusCallbacks {
   /** Called when user selects an agent and installation is about to start */
-  onInstallationStarting?: () => void;
+  onInstallationStarting?: () => void | Promise<void>;
   onVerifying?: (projectId: string) => void;
   onVerified?: (projectId: string, tools: string[]) => void;
   onFailed?: (projectId: string, error: string) => void;
@@ -155,7 +155,7 @@ export async function installMcp(
     }
 
     // Notify that installation is starting (reset states)
-    statusCallbacks?.onInstallationStarting?.();
+    await statusCallbacks?.onInstallationStarting?.();
 
     // Step 2: Get workspace folder for project-local clients
     let workspaceFolder: string | undefined;

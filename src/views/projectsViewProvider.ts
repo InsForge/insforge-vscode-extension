@@ -446,7 +446,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
         const escapedProjectName = this._escapeHtml(project.name);
         const escapedStatus = this._escapeHtml(project.status || 'Unknown');
         const escapedLocation = this._escapeHtml(project.region || 'Unknown');
-        const escapedDbSize = this._escapeHtml(project.storage_disk_size ? `${project.storage_disk_size} GB` : 'Unknown');
+        const escapedDbSize = this._escapeHtml(project.storage_disk_size != null ? `${project.storage_disk_size} GB` : 'Unknown');
         const mcpStatus = this.getMcpStatus(project.id);
         const mcpTools = this.getMcpTools(project.id);
         const toolCount = mcpTools?.length || 0;
