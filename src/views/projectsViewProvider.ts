@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { AuthProvider, Organization, Project } from '../auth/authProvider';
 import { McpStatus } from '../commands/installMcp';
-import { startMcpSocketListener, stopMcpSocketListener, stopAllMcpSocketListeners } from '../utils/mcpSocketListener';
+import { startMcpSocketListener, stopAllMcpSocketListeners } from '../utils/mcpSocketListener';
 import { loadSvg } from '../utils/svgLoader';
 
 const MCP_STATUS_KEY = 'insforge.mcpStatus';
@@ -126,13 +126,6 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Check if a project has MCP verified (for backward compatibility)
-   */
-  public isMcpInstalled(projectId: string): boolean {
-    return this.getMcpStatus(projectId) === 'verified';
-  }
-
-  /**
    * Get the project ID that currently has MCP installed (for backward compatibility)
    */
   public getInstalledMcpProject(): string | null {
@@ -200,17 +193,30 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Stop socket listener for a project
-   */
-  public stopSocketListener(projectId: string): void {
-    stopMcpSocketListener(projectId);
-  }
-
-  /**
    * Stop all socket listeners (called on deactivate)
    */
   public stopAllSocketListeners(): void {
     stopAllMcpSocketListeners();
+  }
+
+  /**
+   * Reset MCP states when starting a new installation.
+   * Clears all project MCP statuses and resets the guide card state.
+   */
+  public async resetMcpStatesForNewInstallation(): Promise<void> {
+    if (!this._context) return;
+    
+    // Stop all socket listeners
+    this.stopAllSocketListeners();
+    
+    // Clear all MCP statuses (removes all green/yellow/red dots)
+    await this._context.globalState.update(MCP_STATUS_KEY, {});
+    
+    // Reset guide card state (so it doesn't show "completed")
+    await this._context.globalState.update(MCP_REAL_CONNECTED_KEY, false);
+    
+    console.debug('[ProjectsViewProvider] Reset MCP states for new installation');
+    this.refresh();
   }
 
   /**
@@ -408,20 +414,22 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     const checkedSvg = loadSvg(this._extensionUri, 'resources/icons/checked.svg');
 
     const orgsHtml = orgsWithProjects.map(({ org, projects }) => {
+      const escapedOrgName = this._escapeHtml(org.name);
+
       if (projects.length === 0) {
-        // Empty state for org with no projects
+        // Empty state for org with no projects - collapsed by default
         return `
           <div class="org-section">
             <div class="org-header" onclick="toggleOrg('${org.id}')">
-              <span class="codicon codicon-chevron-down" id="chevron-${org.id}"></span>
+              <span class="codicon codicon-chevron-right" id="chevron-${org.id}"></span>
               <span class="codicon codicon-organization"></span>
-              <span class="org-name" title="${this._escapeHtml(org.name)}">${this._escapeHtml(org.name)}</span>
+              <span class="org-name" title="${escapedOrgName}">${escapedOrgName}</span>
               <button class="org-open-btn" onclick="event.stopPropagation(); openInInsforge('${org.id}')" title="Open in InsForge">
                 Open in InsForge
                 <span class="codicon codicon-link-external"></span>
               </button>
             </div>
-            <div class="org-content" id="content-${org.id}">
+            <div class="org-content collapsed" id="content-${org.id}">
               <div class="empty-state">
                 <div class="folder-icon">${folderSvg}</div>
                 <p class="empty-title">No Projects Yet</p>
@@ -435,9 +443,10 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
 
       // Org with projects
       const projectsHtml = projects.map(project => {
-        const statusText = project.status || 'Unknown';
-        const locationText = project.region || 'Unknown';
-        const databaseSize = project.storage_disk_size ? `${project.storage_disk_size} GB` : 'Unknown';
+        const escapedProjectName = this._escapeHtml(project.name);
+        const escapedStatus = this._escapeHtml(project.status || 'Unknown');
+        const escapedLocation = this._escapeHtml(project.region || 'Unknown');
+        const escapedDbSize = this._escapeHtml(project.storage_disk_size != null ? `${project.storage_disk_size} GB` : 'Unknown');
         const mcpStatus = this.getMcpStatus(project.id);
         const mcpTools = this.getMcpTools(project.id);
         const toolCount = mcpTools?.length || 0;
@@ -473,22 +482,22 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           <div class="project-header" onclick="toggleProject('${project.id}')">
             <span class="codicon codicon-chevron-right" id="project-chevron-${project.id}"></span>
             <span class="codicon codicon-project"></span>
-            <span class="project-name" title="${this._escapeHtml(project.name)}">${this._escapeHtml(project.name)}</span>
+            <span class="project-name" title="${escapedProjectName}">${escapedProjectName}</span>
             ${mcpStatusHtml}
           </div>
           <div class="project-content collapsed" id="project-content-${project.id}">
             <div class="project-details">
               <div class="detail-row">
                 <span class="detail-label">Status</span>
-                <span class="detail-value">${this._escapeHtml(statusText)}</span>
+                <span class="detail-value">${escapedStatus}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Location</span>
-                <span class="detail-value">${this._escapeHtml(locationText)}</span>
+                <span class="detail-value">${escapedLocation}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Database</span>
-                <span class="detail-value">${this._escapeHtml(databaseSize)}</span>
+                <span class="detail-value">${escapedDbSize}</span>
               </div>
               <a class="view-details-link" href="#" onclick="event.preventDefault(); viewProjectDetails('${project.id}')">
                 View Details in InsForge
@@ -505,7 +514,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           <div class="org-header" onclick="toggleOrg('${org.id}')">
             <span class="codicon codicon-chevron-down" id="chevron-${org.id}"></span>
             <span class="codicon codicon-organization"></span>
-            <span class="org-name" title="${this._escapeHtml(org.name)}">${this._escapeHtml(org.name)}</span>
+            <span class="org-name" title="${escapedOrgName}">${escapedOrgName}</span>
             <button class="org-open-btn" onclick="event.stopPropagation(); openInInsforge('${org.id}')" title="Open in InsForge">
               Open in InsForge
               <span class="codicon codicon-link-external"></span>

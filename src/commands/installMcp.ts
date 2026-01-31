@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
 import { buildTerminalOutput, InstallerResult } from '../utils/terminalOutput';
+import { tryOpenChatWithPrompt, usesTerminalChat } from '../utils/chatOpener';
 
 /**
  * MCP installation status
@@ -13,6 +15,8 @@ export type McpStatus = 'none' | 'verifying' | 'verified' | 'failed';
  * Callbacks for MCP installation status changes
  */
 export interface McpStatusCallbacks {
+  /** Called when user selects an agent and installation is about to start */
+  onInstallationStarting?: () => void | Promise<void>;
   onVerifying?: (projectId: string) => void;
   onVerified?: (projectId: string, tools: string[]) => void;
   onFailed?: (projectId: string, error: string) => void;
@@ -26,6 +30,11 @@ function isDarkTheme(): boolean {
   return theme.kind === vscode.ColorThemeKind.Dark ||
     theme.kind === vscode.ColorThemeKind.HighContrast;
 }
+
+// MCP verification constants
+const MCP_VERIFY_MAX_ATTEMPTS = 3;
+const MCP_VERIFY_DELAY_MS = 2000;
+const MCP_RETRY_MAX_ATTEMPTS = 3;
 
 // Supported MCP clients from @insforge/install
 const MCP_CLIENTS = [
@@ -146,6 +155,13 @@ export async function installMcp(
       return false; // User cancelled
     }
 
+    // Notify that installation is starting (reset states)
+    try {
+      await statusCallbacks?.onInstallationStarting?.();
+    } catch (err) {
+      console.warn('[installMcp] onInstallationStarting failed', err);
+    }
+
     // Step 2: Get workspace folder for project-local clients
     let workspaceFolder: string | undefined;
 
@@ -153,13 +169,8 @@ export async function installMcp(
       const workspaceFolders = vscode.workspace.workspaceFolders;
 
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage(
-          `${clientPick.label} requires an open workspace folder to install MCP config.`
-        );
-        return false;
-      }
-
-      if (workspaceFolders.length === 1) {
+        workspaceFolder = os.homedir();
+      } else if (workspaceFolders.length === 1) {
         workspaceFolder = workspaceFolders[0].uri.fsPath;
       } else {
         // Multiple workspaces - let user pick
@@ -253,11 +264,14 @@ export async function installMcp(
       apiKey,
       apiBaseUrl,
       {
-        onVerifying: () => {
-          // Already notified above
-        },
-        onVerified: (tools) => {
+        onVerified: async (tools) => {
           statusCallbacks?.onVerified?.(project.id, tools);
+
+          // Try to open AI chat with welcome prompt
+          // For terminal-based agents (claude-code, codex), reuse the installation terminal
+          const chatOptions = usesTerminalChat(clientPick.id) ? { terminal } : undefined;
+          await tryOpenChatWithPrompt(clientPick.id, undefined, chatOptions);
+
           vscode.window.showInformationMessage(
             `MCP server verified! ${tools.length} tools available.`,
             'View Tools'
@@ -282,8 +296,6 @@ export async function installMcp(
           });
         }
       },
-      10,  // maxAttempts
-      2000 // delayMs between attempts
     );
 
     return true;
@@ -309,7 +321,7 @@ export async function retryVerification(
     apiKey,
     apiBaseUrl,
     {
-      onVerifying: () => {},
+      onVerifying: () => { },
       onVerified: (tools) => {
         statusCallbacks?.onVerified?.(projectId, tools);
         vscode.window.showInformationMessage(`MCP server verified! ${tools.length} tools available.`);
@@ -319,7 +331,5 @@ export async function retryVerification(
         vscode.window.showErrorMessage(`MCP verification failed: ${error}`);
       }
     },
-    5,   // fewer attempts for retry
-    2000
   );
 }
