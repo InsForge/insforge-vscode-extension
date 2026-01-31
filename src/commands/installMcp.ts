@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import { spawn } from 'child_process';
 import { AuthProvider, Project } from '../auth/authProvider';
 import { verifyMcpInstallation } from '../utils/mcpVerifier';
@@ -164,13 +165,8 @@ export async function installMcp(
       const workspaceFolders = vscode.workspace.workspaceFolders;
 
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage(
-          `${clientPick.label} requires an open workspace folder to install MCP config.`
-        );
-        return false;
-      }
-
-      if (workspaceFolders.length === 1) {
+        workspaceFolder = os.homedir();
+      } else if (workspaceFolders.length === 1) {
         workspaceFolder = workspaceFolders[0].uri.fsPath;
       } else {
         // Multiple workspaces - let user pick
@@ -296,8 +292,6 @@ export async function installMcp(
           });
         }
       },
-      MCP_VERIFY_MAX_ATTEMPTS,
-      MCP_VERIFY_DELAY_MS
     );
 
     return true;
@@ -333,7 +327,5 @@ export async function retryVerification(
         vscode.window.showErrorMessage(`MCP verification failed: ${error}`);
       }
     },
-    MCP_RETRY_MAX_ATTEMPTS,
-    MCP_VERIFY_DELAY_MS
   );
 }
