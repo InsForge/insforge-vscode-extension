@@ -156,7 +156,11 @@ export async function installMcp(
     }
 
     // Notify that installation is starting (reset states)
-    await statusCallbacks?.onInstallationStarting?.();
+    try {
+      await statusCallbacks?.onInstallationStarting?.();
+    } catch (err) {
+      console.warn('[installMcp] onInstallationStarting failed', err);
+    }
 
     // Step 2: Get workspace folder for project-local clients
     let workspaceFolder: string | undefined;
@@ -262,12 +266,12 @@ export async function installMcp(
       {
         onVerified: async (tools) => {
           statusCallbacks?.onVerified?.(project.id, tools);
-          
+
           // Try to open AI chat with welcome prompt
           // For terminal-based agents (claude-code, codex), reuse the installation terminal
           const chatOptions = usesTerminalChat(clientPick.id) ? { terminal } : undefined;
           await tryOpenChatWithPrompt(clientPick.id, undefined, chatOptions);
-          
+
           vscode.window.showInformationMessage(
             `MCP server verified! ${tools.length} tools available.`,
             'View Tools'
@@ -317,7 +321,7 @@ export async function retryVerification(
     apiKey,
     apiBaseUrl,
     {
-      onVerifying: () => {},
+      onVerifying: () => { },
       onVerified: (tools) => {
         statusCallbacks?.onVerified?.(projectId, tools);
         vscode.window.showInformationMessage(`MCP server verified! ${tools.length} tools available.`);
