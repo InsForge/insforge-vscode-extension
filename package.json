@@ -2,7 +2,7 @@
   "name": "insforge",
   "displayName": "InsForge",
   "description": "Install and manage InsForge MCP servers with one click. Connect your projects and configure AI coding assistants.",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publisher": "insforge",
   "icon": "resources/icon.png",
   "repository": {
