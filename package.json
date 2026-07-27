@@ -164,13 +164,14 @@
   },
   "overrides": {
     "minimatch": ">=9.0.7",
-    "brace-expansion": ">=5.0.6",
+    "brace-expansion": ">=5.0.7",
     "lodash": ">=4.18.0",
     "uuid": ">=14.0.0",
     "follow-redirects": ">=1.16.0",
-    "fast-uri": ">=3.1.2",
+    "fast-uri": ">=4.1.1",
     "tmp": ">=0.2.7",
     "qs": ">=6.15.2",
-    "ws": ">=8.21.0"
+    "ws": ">=8.21.0",
+    "markdown-it": "14.3.0"
   }
 }
