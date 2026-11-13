@@ -358,7 +358,7 @@ export class AuthProvider {
     redirectUri: string
   ): Promise<UserData | null> {
     return new Promise((resolve, reject) => {
-      let server: http.Server | undefined;
+      let server: http.Server;
       let timeout: NodeJS.Timeout | undefined;
       let settled = false;
 
@@ -366,7 +366,7 @@ export class AuthProvider {
         if (settled) return;
         settled = true;
         if (timeout) clearTimeout(timeout);
-        server?.close();
+        server.close();
         if (error) reject(error);
         else resolve(result);
       };
@@ -505,9 +505,12 @@ export class AuthProvider {
         }
       });
 
-      // Timeout after 5 minutes
-      setTimeout(() => {
-            finish(null);
+      // Timeout after 5 minutes. Do not leave a pending timer after callback completion.
+      timeout = setTimeout(() => {
+        vscode.window.showErrorMessage(
+          'InsForge login timed out before the OAuth callback arrived. Check the authorization page for an OAuth error, then try again.'
+        );
+        finish(null);
       }, 5 * 60 * 1000);
 
       server.on('error', (err: NodeJS.ErrnoException) => {
