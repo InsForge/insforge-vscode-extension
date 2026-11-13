@@ -358,7 +358,20 @@ export class AuthProvider {
     redirectUri: string
   ): Promise<UserData | null> {
     return new Promise((resolve, reject) => {
-      const server = http.createServer(async (req, res) => {
+      let server: http.Server | undefined;
+      let timeout: NodeJS.Timeout | undefined;
+      let settled = false;
+
+      const finish = (result: UserData | null, error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        server?.close();
+        if (error) reject(error);
+        else resolve(result);
+      };
+
+      server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://127.0.0.1:${port}`);
 
         if (url.pathname === '/callback') {
@@ -383,8 +396,7 @@ export class AuthProvider {
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -399,8 +411,7 @@ export class AuthProvider {
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -415,8 +426,7 @@ export class AuthProvider {
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -459,12 +469,9 @@ export class AuthProvider {
             // Update context and notify
             vscode.commands.executeCommand('setContext', 'insforge.isLoggedIn', true);
             this._onDidChangeAuth.fire(true);
-
-            server.close();
-            resolve(userData);
+            finish(userData);
           } catch (err) {
-            server.close();
-            reject(err);
+            finish(null, err instanceof Error ? err : new Error(String(err)));
           }
         } else {
           res.writeHead(404);
@@ -486,20 +493,27 @@ export class AuthProvider {
         authUrl.searchParams.set('code_challenge_method', 'S256');
 
         // Open browser for OAuth
-        await vscode.env.openExternal(vscode.Uri.parse(authUrl.toString()));
-        vscode.window.showInformationMessage('Complete login in your browser...');
+        try {
+          const opened = await vscode.env.openExternal(vscode.Uri.parse(authUrl.toString()));
+          if (!opened) {
+            finish(null, new Error('Could not open the InsForge authorization page in your browser.'));
+            return;
+          }
+          vscode.window.showInformationMessage('Complete login in your browser...');
+        } catch (error) {
+          finish(null, error instanceof Error ? error : new Error(String(error)));
+        }
       });
 
       // Timeout after 5 minutes
       setTimeout(() => {
-        server.close();
-        resolve(null);
+            finish(null);
       }, 5 * 60 * 1000);
 
       server.on('error', (err: NodeJS.ErrnoException) => {
         // This shouldn't happen since we check port availability first,
         // but handle it just in case
-        reject(new Error(`Failed to start callback server: ${err.message}`));
+        finish(null, new Error(`Failed to start callback server: ${err.message}`));
       });
     });
   }
