@@ -17,6 +17,20 @@ const OAUTH_PORT_END = 54330;
 // OAuth scopes
 const SCOPES = 'user:read organizations:read projects:read projects:write';
 
+/** Escape untrusted OAuth error text before inserting it into the callback HTML. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[char];
+  });
+}
+
 export interface UserData {
   id: string;
   email: string;
@@ -287,7 +301,7 @@ export class AuthProvider {
         resolve(false);
       });
       server.once('listening', () => {
-        server.close();
+        if (server.listening) server.close();
         resolve(true);
       });
       server.listen(port, '127.0.0.1');
@@ -344,16 +358,34 @@ export class AuthProvider {
     redirectUri: string
   ): Promise<UserData | null> {
     return new Promise((resolve, reject) => {
-      const server = http.createServer(async (req, res) => {
+      let server: http.Server;
+      let timeout: NodeJS.Timeout | undefined;
+      let settled = false;
+
+      const finish = (result: UserData | null, error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        server.close();
+        if (error) reject(error);
+        else resolve(result);
+      };
+
+      server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://127.0.0.1:${port}`);
 
         if (url.pathname === '/callback') {
           const code = url.searchParams.get('code');
           const returnedState = url.searchParams.get('state');
           const error = url.searchParams.get('error');
+          const errorDescription = url.searchParams.get('error_description');
 
           // Send response to browser
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+          });
 
           if (error) {
             res.end(`
@@ -361,14 +393,14 @@ export class AuthProvider {
                 <body style="font-family: system-ui; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0a0a0a; color: #fff;">
                   <div style="text-align: center;">
                     <h1>Authentication Failed</h1>
-                    <p>${error}</p>
+                    <p>${escapeHtml(error)}</p>
+                    ${errorDescription ? `<p>${escapeHtml(errorDescription)}</p>` : ''}
                     <p>You can close this window.</p>
                   </div>
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -383,8 +415,7 @@ export class AuthProvider {
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -399,8 +430,7 @@ export class AuthProvider {
                 </body>
               </html>
             `);
-            server.close();
-            resolve(null);
+            finish(null);
             return;
           }
 
@@ -443,12 +473,9 @@ export class AuthProvider {
             // Update context and notify
             vscode.commands.executeCommand('setContext', 'insforge.isLoggedIn', true);
             this._onDidChangeAuth.fire(true);
-
-            server.close();
-            resolve(userData);
+            finish(userData);
           } catch (err) {
-            server.close();
-            reject(err);
+            finish(null, err instanceof Error ? err : new Error(String(err)));
           }
         } else {
           res.writeHead(404);
@@ -470,20 +497,30 @@ export class AuthProvider {
         authUrl.searchParams.set('code_challenge_method', 'S256');
 
         // Open browser for OAuth
-        await vscode.env.openExternal(vscode.Uri.parse(authUrl.toString()));
-        vscode.window.showInformationMessage('Complete login in your browser...');
+        try {
+          const opened = await vscode.env.openExternal(vscode.Uri.parse(authUrl.toString()));
+          if (!opened) {
+            finish(null, new Error('Could not open the InsForge authorization page in your browser.'));
+            return;
+          }
+          vscode.window.showInformationMessage('Complete login in your browser...');
+        } catch (error) {
+          finish(null, error instanceof Error ? error : new Error(String(error)));
+        }
       });
 
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        server.close();
-        resolve(null);
+      // Timeout after 5 minutes. Do not leave a pending timer after callback completion.
+      timeout = setTimeout(() => {
+        vscode.window.showErrorMessage(
+          'InsForge login timed out before the OAuth callback arrived. Check the authorization page for an OAuth error, then try again.'
+        );
+        finish(null);
       }, 5 * 60 * 1000);
 
       server.on('error', (err: NodeJS.ErrnoException) => {
         // This shouldn't happen since we check port availability first,
         // but handle it just in case
-        reject(new Error(`Failed to start callback server: ${err.message}`));
+        finish(null, new Error(`Failed to start callback server: ${err.message}`));
       });
     });
   }

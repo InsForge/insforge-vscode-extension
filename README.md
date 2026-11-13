@@ -71,21 +71,15 @@ Or in VS Code: `Cmd+Shift+P` → "Extensions: Install from VSIX..." → select t
 
 ## OAuth Setup
 
-Before the extension works, you need to register it as an OAuth client in InsForge:
+The extension uses OAuth 2.0 Authorization Code with PKCE and a temporary loopback callback server.
 
-```bash
-curl -X POST https://app.insforge.dev/api/oauth/v1/clients/register \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "InsForge VS Code Extension",
-    "redirect_uris": ["vscode://insforge.insforge/callback"],
-    "allowed_scopes": ["user:read", "organizations:read", "projects:read", "projects:write"],
-    "client_type": "public"
-  }'
-```
+- The default public client ID is maintained by InsForge in `src/auth/authProvider.ts`.
+- If InsForge provides you with a different public client ID, set it in VS Code Settings as `insforge.oauthClientId`. Leave it empty to use the built-in default.
+- Leave `insforge.oauthClientSecret` empty for the public PKCE client. Only configure a secret if InsForge explicitly provides one for a confidential client.
+- The callback URL is generated at runtime as `http://127.0.0.1:{port}/callback`. The extension searches ports `54321` through `54330`; the OAuth client must allow the actual loopback redirect URI used during login.
+- Requested scopes: `user:read organizations:read projects:read projects:write`.
 
-Then update the `OAUTH_CLIENT_ID` in `src/auth/authProvider.ts`.
+Do not register a second OAuth client or replace the built-in client ID unless InsForge support confirms that the current client is unavailable and supplies a replacement.
 
 ## Architecture
 
