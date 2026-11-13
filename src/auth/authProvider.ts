@@ -17,6 +17,20 @@ const OAUTH_PORT_END = 54330;
 // OAuth scopes
 const SCOPES = 'user:read organizations:read projects:read projects:write';
 
+/** Escape untrusted OAuth error text before inserting it into the callback HTML. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[char];
+  });
+}
+
 export interface UserData {
   id: string;
   email: string;
@@ -351,6 +365,7 @@ export class AuthProvider {
           const code = url.searchParams.get('code');
           const returnedState = url.searchParams.get('state');
           const error = url.searchParams.get('error');
+          const errorDescription = url.searchParams.get('error_description');
 
           // Send response to browser
           res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -361,7 +376,8 @@ export class AuthProvider {
                 <body style="font-family: system-ui; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0a0a0a; color: #fff;">
                   <div style="text-align: center;">
                     <h1>Authentication Failed</h1>
-                    <p>${error}</p>
+                    <p>${escapeHtml(error)}</p>
+                    ${errorDescription ? `<p>${escapeHtml(errorDescription)}</p>` : ''}
                     <p>You can close this window.</p>
                   </div>
                 </body>
