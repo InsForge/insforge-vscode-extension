@@ -301,7 +301,7 @@ export class AuthProvider {
         resolve(false);
       });
       server.once('listening', () => {
-        server.close();
+        if (server.listening) server.close();
         resolve(true);
       });
       server.listen(port, '127.0.0.1');
@@ -381,7 +381,11 @@ export class AuthProvider {
           const errorDescription = url.searchParams.get('error_description');
 
           // Send response to browser
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+          });
 
           if (error) {
             res.end(`
